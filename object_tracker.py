@@ -218,7 +218,7 @@ def main(_argv):
 
         # update tracks
         for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1 or int(track.to_tlbr()[2])-int(track.to_tlbr()[0]) > 200 or int(track.to_tlbr()[3])-int(track.to_tlbr()[1]) > 300: #Vincent
+            if not track.is_confirmed() or track.time_since_update > 1 or int(track.to_tlbr()[2])-int(track.to_tlbr()[0]) > 110 or int(track.to_tlbr()[3])-int(track.to_tlbr()[1]) > 170: #Vincent
                 continue
             bbox = track.to_tlbr()
             class_name = track.get_class()
