@@ -95,12 +95,15 @@ def main(_argv):
     ### Vincent
     # computation of perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
     # Video size is 1920x1080 & Img size is 498x321
-    pts1 = np.float32([[0,99],[1642,103],[0,1033],[1920,1029]]) #White side 1
-    #pts1 = np.float32([[0,91],[1920,87],[0,1027],[1920,1029]]) #Mid side 1
+
     #pts1 = np.float32([[277,92],[1920,90],[0,1038],[1920,1038]]) #Blue side 1
-    pts2 = np.float32([[306,0],[498,0],[364,321],[478,321]]) #White side 1 2D
-    #pts2 = np.float32([[192,0],[306,0],[192,321],[364,321]]) #Mid side 1 2D
-    #pts2 = np.float32([[0,0],[192,0],[25,321],[192,321]]) #Blue side 1 2D
+    pts1 = np.float32([[0,91],[1920,87],[0,1027],[1920,1029]]) #Mid side 1
+    #pts1 = np.float32([[0,99],[1642,103],[0,1033],[1920,1029]]) #White side 1
+
+    #pts2 = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
+    pts2 = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
+    #pts2 = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
+
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
     ###
 
@@ -200,8 +203,25 @@ def main(_argv):
         detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
 
         #initialize color map
-        cmap = plt.get_cmap('tab20b')
-        colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+        #cmap = plt.get_cmap('tab20b') #Vincent
+        #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)] #Vincent
+
+        ### Vincent
+        ref_low = (17, 15, 75) #red (BGR)
+        ref_high = (50, 56, 200)
+        home_low = (43, 31, 4) #blue (BGR)
+        home_high = (250, 88, 50)
+        away_low = (187,169,112) #white (BGR)
+        away_high = (255,255,255)
+        frame_to_mask = np.asarray(frame)
+        frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        mask_ref = cv2.inRange(frame_to_mask, ref_low, ref_high)
+        mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
+        mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+        frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
+        frame_masked_home = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home)
+        frame_masked_away = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away)
+        ###
 
         # run non-maxima supression
         boxs = np.array([d.tlwh for d in detections])
@@ -225,17 +245,39 @@ def main(_argv):
             score = track.get_score() #Vincent
 
         # draw bbox on screen
-            color = colors[int(track.track_id) % len(colors)]
-            color = [i * 255 for i in color]
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.2f}".format(score))))*17, int(bbox[1])), color, -1) #Vincent
-            cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2) #Vincent
+            #color = colors[int(track.track_id) % len(colors)] #Vincent
+            #color = [i * 255 for i in color] #Vincent
+
+            crop_image_ref = frame_masked_ref[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+            crop_image_home = frame_masked_home[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+            crop_image_away = frame_masked_away[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+
+            ref_ratio = black_pixels_ratio(crop_image_ref)
+            home_ratio = black_pixels_ratio(crop_image_home)
+            away_ratio = black_pixels_ratio(crop_image_away)
+
+            ratio_list = [ref_ratio, home_ratio, away_ratio]
+            color_box = None
+            color_text = None
+            if min(ratio_list) == ref_ratio:
+                color_box = (255,0,0)
+                color_text = (255,255,255)
+            elif min(ratio_list) == home_ratio:
+                color_box = (0,0,255)
+                color_text = (255,255,255)
+            else:
+                color_box = (255,255,255)
+                color_text = (0,0,0)
+
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color_box, 2)
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.2f}".format(score))))*17, int(bbox[1])), color_box, -1) #Vincent
+            cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
 
             ### Vincent
             px_vid = (int(bbox[0])+int(bbox[2]))/2
             py_vid = int(bbox[3])
             px_img, py_img = transform_coordinates_from_3D_to_2D(matrix, px_vid, py_vid)
-            points_info.append((track.track_id, px_img, py_img, color))
+            points_info.append((track.track_id, px_img, py_img, color_box))
             ###
 
         # if enable info flag then print details about each track
@@ -262,7 +304,8 @@ def main(_argv):
         cv2.circle(bird_eye, (pts2[3][0], pts2[3][1]), 2, (255,0,255),cv2.FILLED)
 
         for pi in points_info:
-            print(pi)
+            if FLAGS.info:
+                print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}".format(pi[0], pi[1], pi[2], pi[3]))
             cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
 
         result[ 759:759+321 , 1322:1322+498 ] = bird_eye
@@ -278,6 +321,19 @@ def main(_argv):
     cv2.destroyAllWindows()
 
 ### Vincent
+def black_pixels_ratio(crop_image):
+    #Get frame height and width to access pixels
+    height, width, _ = crop_image.shape
+    if height == 0 or width == 0:
+        return 1.0
+    #Accessing BGR pixel values
+    count = 0
+    for x in range(0, width) :
+         for y in range(0, height) :
+             if crop_image[y,x,0] == 0 and crop_image[y,x,1] == 0 and crop_image[y,x,2] == 0: #BGR Channel Value
+                count += 1
+    return count/(height*width)
+
 def transform_coordinates_from_3D_to_2D(matrix, px_vid, py_vid):
     px_img = (matrix[0][0]*px_vid + matrix[0][1]*py_vid + matrix[0][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
     py_img = (matrix[1][0]*px_vid + matrix[1][1]*py_vid + matrix[1][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
