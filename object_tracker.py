@@ -82,7 +82,7 @@ def main(_argv):
     #    vid = cv2.VideoCapture(video_path) #Vincent
 
     ### Vincent
-    vid_args = video_path.split(";")
+    vid_args = video_path.split("+")
     try:
         vid_blue = cv2.VideoCapture(int(vid_args[0]))
     except:
