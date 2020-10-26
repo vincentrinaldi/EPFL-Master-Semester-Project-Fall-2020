@@ -149,6 +149,7 @@ def main(_argv):
     matrix_list = [matrix_blue, matrix_mid, matrix_white] #Vincent
     quit_pressed = False #Vincent
     for nb_frames_to_process in frame_iter_process_list: #Vincent
+        min_nb_valid_frames = nb_frames_to_process
         sngl_frame_state_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
         sngl_nb_detections_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
         tot_rec_points_per_frame = [None for i in range(nb_frames_to_process)] #Vincent
@@ -172,10 +173,12 @@ def main(_argv):
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         image = Image.fromarray(frame)
                     else:
-                        print('Video has failed, try a different video format!')
+                        if min_nb_valid_frames > frame_num:
+                            min_nb_valid_frames = frame_num
+                        print('Video has ended earlier than expected or has failed, try a different video format!')
                         break
                 else:
-                    print('Limit of frames to process at once is reached!')
+                    print('Limit of frames to process at once is reached, processing next batch of frames of subsequent video!')
                     break
                 ###
 
@@ -322,7 +325,10 @@ def main(_argv):
                     ratio_list = [ref_ratio, home_ratio, away_ratio]
                     color_box = None
                     color_text = None
-                    if min(ratio_list) == ref_ratio:
+                    if class_name == 'sports ball':
+                        color_box = (255,255,0)
+                        color_text = (0,0,0)
+                    elif min(ratio_list) == ref_ratio:
                         color_box = (255,0,0)
                         color_text = (255,255,255)
                     elif min(ratio_list) == home_ratio:
@@ -362,7 +368,7 @@ def main(_argv):
                 fps = 1.0 / (time.time() - start_time)
                 print("FPS: %.2f" % fps)
 
-        for i in range(nb_frames_to_process): #Vincent
+        for i in range(min_nb_valid_frames): #Vincent
             idx_next_displayed_frame = sngl_nb_detections_per_frame[i].index(max(sngl_nb_detections_per_frame[i])) #Vincent
             next_displayed_frame = sngl_frame_state_per_frame[i][idx_next_displayed_frame] #Vincent
 
