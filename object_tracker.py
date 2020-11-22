@@ -377,19 +377,11 @@ def main(_argv):
                 ###
 
                 ### Vincent
-                ky = None
-                kx = None
-                cmap = None
-                if idx == 2:
-                    ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
-                else:
-                    ky, kx = 4 * frame_size[0]/270.0, 4 * frame_size[1]/480.0
-                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,270))]), batch_size=1, verbose=1)
+                ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+                cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
                 cm = cmap[0,:,:,0]
                 pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
                 y,x = pos
-                #print(cm[y,x])
                 x = -1 if cm[y,x] < 0.999999 else x
                 y,x = math.floor(ky * y), math.floor(kx * x)
                 if x < 0:
