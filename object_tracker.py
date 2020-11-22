@@ -19,6 +19,12 @@ import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
 
+### Vincent
+from tensorflow import keras
+from tensorflow.keras import backend as K
+import math
+###
+
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
@@ -74,6 +80,11 @@ def main(_argv):
     else:
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
         infer = saved_model_loaded.signatures['serving_default']
+
+    ### Vincent
+    customObj = {'deepball_loss_function': deepball_loss_function, 'deepball_precision': deepball_precision}
+    deep_ball_model = keras.models.load_model('./deepballlocal.h5', custom_objects=customObj)
+    ###
 
     # begin video capture
     #try: #Vincent
@@ -343,6 +354,22 @@ def main(_argv):
                     cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
 
                     ### Vincent
+                    ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
+                    cm = cmap[0,:,:,0]
+                    pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
+                    y,x = pos
+                    #print(cm[y,x])
+                    x = -1 if cm[y,x] < 0.999999 else x
+                    y,x = math.floor(ky * y), math.floor(kx * x)
+                    if x < 0:
+                        print("*** No ball detected ***")
+                    else:
+                        ball_pos = np.array([y,x])
+                        cv2.circle(frame, (x, y), 16, (255,255,0), 2)
+                    ###
+
+                    ### Vincent
                     px_vid = (int(bbox[0])+int(bbox[2]))/2
                     py_vid = int(bbox[3])
                     px_img, py_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], px_vid, py_vid)
@@ -448,6 +475,41 @@ def transform_coordinates_from_3D_to_2D(matrix, px_vid, py_vid):
     px_img = (matrix[0][0]*px_vid + matrix[0][1]*py_vid + matrix[0][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
     py_img = (matrix[1][0]*px_vid + matrix[1][1]*py_vid + matrix[1][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
     return int(px_img), int(py_img)
+###
+
+### Vincent
+def deepball_loss_function(y_true, y_pred):
+    # y_true (batch_size, 68, 120, 2)
+    # y_pred (batch_size, 68, 120, 2)
+
+    ball_gt, bg_gt = y_true[:,:,:,0], y_true[:,:,:,1]
+    N = K.sum(ball_gt, axis=(1,2)) + 1
+    M = K.sum(bg_gt, axis=(1,2)) + 1
+    zer = K.zeros_like(ball_gt)
+
+    y_pred = K.log(y_pred)
+    ball_cm = y_pred[:,:,:,0]
+    bg_cm = y_pred[:,:,:,1]
+
+    Lpos = K.sum(zer + (ball_cm * ball_gt), axis=(1,2))
+    Lpos = K.sum(K.zeros_like(N) + (Lpos / tf.maximum(1.0, N)))
+
+    Lneg = K.sum(zer + (bg_cm * bg_gt), axis=(1,2))
+    Lneg = K.sum(K.zeros_like(M) + (Lneg / tf.maximum(1.0, M)))
+    #print(K.eval(Lpos),K.eval(Lneg))
+
+    # Multiplying by batch_size as Keras automatically averages the scalar output over it
+    return (-Lpos - 0.3*Lneg) * 16
+
+def deepball_precision(y_true, y_pred):
+    ball_gt = y_true[:,:,:,0]
+    ball_cm = y_pred[:,:,:,0]
+
+    thre_ball_cm = K.cast(K.greater(ball_cm, 0.998), "float32")
+    tp = K.sum(ball_gt * thre_ball_cm)
+    totalp = K.sum(K.max(thre_ball_cm, axis=(1,2)))
+
+    return tp/tf.maximum(1.0, totalp)
 ###
 
 if __name__ == '__main__':
