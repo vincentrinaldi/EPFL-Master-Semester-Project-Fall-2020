@@ -155,14 +155,15 @@ def main(_argv):
     matrix_white = cv2.getPerspectiveTransform(pts_video_white, pts_map_white)
     ###
 
-    # switch camera on angle having highest number of detections
+    # switch camera on angle detecting the ball (mid angle in priority)
     vid_list = [vid_blue, vid_mid, vid_white] #Vincent
     matrix_list = [matrix_blue, matrix_mid, matrix_white] #Vincent
     quit_pressed = False #Vincent
     for nb_frames_to_process in frame_iter_process_list: #Vincent
         min_nb_valid_frames = nb_frames_to_process
         sngl_frame_state_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
-        sngl_nb_detections_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
+        #sngl_nb_detections_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
+        sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
         tot_rec_points_per_frame = [None for i in range(nb_frames_to_process)] #Vincent
         for idx, vid in enumerate(vid_list): #Vincent
 
@@ -354,22 +355,6 @@ def main(_argv):
                     cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
 
                     ### Vincent
-                    ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
-                    cm = cmap[0,:,:,0]
-                    pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
-                    y,x = pos
-                    #print(cm[y,x])
-                    x = -1 if cm[y,x] < 0.999999 else x
-                    y,x = math.floor(ky * y), math.floor(kx * x)
-                    if x < 0:
-                        print("*** No ball detected ***")
-                    else:
-                        ball_pos = np.array([y,x])
-                        cv2.circle(frame, (x, y), 16, (255,255,0), 2)
-                    ###
-
-                    ### Vincent
                     px_vid = (int(bbox[0])+int(bbox[2]))/2
                     py_vid = int(bbox[3])
                     px_img, py_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], px_vid, py_vid)
@@ -382,7 +367,7 @@ def main(_argv):
 
                 ### Vincent
                 sngl_frame_state_per_frame[frame_num-1][idx] = frame
-                sngl_nb_detections_per_frame[frame_num-1][idx] = len(points_info)
+                #sngl_nb_detections_per_frame[frame_num-1][idx] = len(points_info)
                 if idx == 0:
                     tot_rec_points_per_frame[frame_num-1] = []
                 for pi in points_info:
@@ -391,12 +376,41 @@ def main(_argv):
                     tot_rec_points_per_frame[frame_num-1].append(pi)
                 ###
 
+                ### Vincent
+                ky = None
+                kx = None
+                cmap = None
+                if idx == 2:
+                    ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
+                else:
+                    ky, kx = 4 * frame_size[0]/270.0, 4 * frame_size[1]/480.0
+                    cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,270))]), batch_size=1, verbose=1)
+                cm = cmap[0,:,:,0]
+                pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
+                y,x = pos
+                #print(cm[y,x])
+                x = -1 if cm[y,x] < 0.999999 else x
+                y,x = math.floor(ky * y), math.floor(kx * x)
+                if x < 0:
+                    print("*** No ball detected ***")
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+                else:
+                    cv2.circle(frame, (x, y), 16, (255,255,0), 2)
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 1
+                ###
+
                 # calculate frames per second of running detections
                 fps = 1.0 / (time.time() - start_time)
                 print("FPS: %.2f" % fps)
 
         for i in range(min_nb_valid_frames): #Vincent
-            idx_next_displayed_frame = sngl_nb_detections_per_frame[i].index(max(sngl_nb_detections_per_frame[i])) #Vincent
+            #idx_next_displayed_frame = sngl_nb_detections_per_frame[i].index(max(sngl_nb_detections_per_frame[i])) #Vincent
+            count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0]) #Vincent
+            if count > 1: #Vincent
+                idx_next_displayed_frame = 1 #Vincent
+            else: #Vincent
+                idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i])) #Vincent
             next_displayed_frame = sngl_frame_state_per_frame[i][idx_next_displayed_frame] #Vincent
 
             #result = np.asarray(frame) #Vincent
