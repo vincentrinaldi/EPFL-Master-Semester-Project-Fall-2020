@@ -158,8 +158,9 @@ def main(_argv):
     # switch camera on angle detecting the ball (mid angle in priority)
     vid_list = [vid_blue, vid_mid, vid_white] #Vincent
     matrix_list = [matrix_blue, matrix_mid, matrix_white] #Vincent
+    idx_next_displayed_frame = 1 #Vincent
     quit_pressed = False #Vincent
-    for nb_frames_to_process in frame_iter_process_list: #Vincent
+    for b_idx, nb_frames_to_process in enumerate(frame_iter_process_list): #Vincent
         min_nb_valid_frames = nb_frames_to_process
         sngl_frame_state_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
         #sngl_nb_detections_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
@@ -195,7 +196,8 @@ def main(_argv):
                 ###
 
                 frame_num +=1
-                print('Frame #: ', frame_num)
+                #print('Frame #: ', frame_num) #Vincent
+                print('Frame #:', frame_num, 'Vid idx:', idx, 'Batch idx:', b_idx) #Vincent
 
                 frame_size = frame.shape[:2]
                 image_data = cv2.resize(frame, (input_size, input_size))
@@ -255,7 +257,7 @@ def main(_argv):
                 #allowed_classes = list(class_names.values())
 
                 # custom allowed classes (uncomment line below to customize tracker for only people)
-                allowed_classes = ['person', 'sports ball']
+                allowed_classes = ['person']
 
                 # loop through objects and use class index to get class name, allow only classes in allowed_classes list
                 names = []
@@ -314,6 +316,24 @@ def main(_argv):
 
                 points_info = [] #Vincent
 
+                ### Vincent
+                ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+                cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
+                cm = cmap[0,:,:,0]
+                pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
+                y,x = pos
+                x = -1 if cm[y,x] < 0.999999 else x
+                y,x = math.floor(ky * y), math.floor(kx * x)
+                if x < 0:
+                    print("*** No ball detected ***")
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+                else:
+                    cv2.circle(frame, (x, y), 16, (255,255,0), 2)
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                    points_info.append((-1, x_img, y_img, (255,255,0)))
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 1
+                ###
+
                 # update tracks
                 for track in tracker.tracks:
                     if not track.is_confirmed() or track.time_since_update > 1 or int(track.to_tlbr()[2])-int(track.to_tlbr()[0]) > 110 or int(track.to_tlbr()[3])-int(track.to_tlbr()[1]) > 170: #Vincent
@@ -337,10 +357,11 @@ def main(_argv):
                     ratio_list = [ref_ratio, home_ratio, away_ratio]
                     color_box = None
                     color_text = None
-                    if class_name == 'sports ball':
-                        color_box = (255,255,0)
-                        color_text = (0,0,0)
-                    elif min(ratio_list) == ref_ratio:
+                    #if class_name == 'sports ball':
+                    #    color_box = (255,255,0)
+                    #    color_text = (0,0,0)
+                    #elif min(ratio_list) == ref_ratio:
+                    if min(ratio_list) == ref_ratio:
                         color_box = (255,0,0)
                         color_text = (255,255,255)
                     elif min(ratio_list) == home_ratio:
@@ -376,22 +397,6 @@ def main(_argv):
                     tot_rec_points_per_frame[frame_num-1].append(pi)
                 ###
 
-                ### Vincent
-                ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-                cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=1)
-                cm = cmap[0,:,:,0]
-                pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
-                y,x = pos
-                x = -1 if cm[y,x] < 0.999999 else x
-                y,x = math.floor(ky * y), math.floor(kx * x)
-                if x < 0:
-                    print("*** No ball detected ***")
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-                else:
-                    cv2.circle(frame, (x, y), 16, (255,255,0), 2)
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = 1
-                ###
-
                 # calculate frames per second of running detections
                 fps = 1.0 / (time.time() - start_time)
                 print("FPS: %.2f" % fps)
@@ -399,10 +404,11 @@ def main(_argv):
         for i in range(min_nb_valid_frames): #Vincent
             #idx_next_displayed_frame = sngl_nb_detections_per_frame[i].index(max(sngl_nb_detections_per_frame[i])) #Vincent
             count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0]) #Vincent
-            if count > 1: #Vincent
-                idx_next_displayed_frame = 1 #Vincent
-            else: #Vincent
-                idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i])) #Vincent
+            if count > 0:
+                if count > 1: #Vincent
+                    idx_next_displayed_frame = 1 #Vincent
+                else: #Vincent
+                    idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i])) #Vincent
             next_displayed_frame = sngl_frame_state_per_frame[i][idx_next_displayed_frame] #Vincent
 
             #result = np.asarray(frame) #Vincent
