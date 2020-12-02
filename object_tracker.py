@@ -48,6 +48,8 @@ flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
+flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video') #Vincent
+
 def main(_argv):
     # Definition of the parameters
     max_cosine_distance = 0.4
@@ -114,6 +116,9 @@ def main(_argv):
     max_fps = max([int(vid_blue.get(cv2.CAP_PROP_FPS)), int(vid_mid.get(cv2.CAP_PROP_FPS)), int(vid_white.get(cv2.CAP_PROP_FPS))])
 
     final_vid_len = min([int(vid_blue.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_mid.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_white.get(cv2.CAP_PROP_FRAME_COUNT))])
+    if FLAGS.vid_len != -1:
+        final_vid_len = FLAGS.vid_len
+
     """
     frame_iter_len = max_fps * 15
     nb_full_frame_iter = final_vid_len // frame_iter_len
@@ -293,6 +298,30 @@ def main(_argv):
             bboxes = np.delete(bboxes, deleted_indx, axis=0)
             scores = np.delete(scores, deleted_indx, axis=0)
 
+            ### Vincent
+            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+            #deep_ball_model.summary()
+            cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
+            cm = cmap[0,:,:,0]
+            pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
+            y,x = pos
+            scr = cm[y,x]
+            x = -1 if scr < 0.999999 else x
+            y,x = math.floor(ky * y), math.floor(kx * x)
+            if x < 0:
+                sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+            else:
+                print("*** Ball detected ***")
+                ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
+                bboxes = np.vstack((bboxes, ball_bbox))
+                scores = np.append(scores, scr)
+                names = np.append(names, "ball")
+                #cv2.circle(frame, (x, y), 16, (255,105,180), 2)
+                #x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                #points_info.append((-1, x_img, y_img, (255,255,0)))
+                sngl_ball_detected_per_frame[frame_num-1][idx] = 1
+            ###
+
             # encode yolo detections and feed to tracker
             features = encoder(frame, bboxes)
             detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
@@ -331,24 +360,6 @@ def main(_argv):
 
             points_info = [] #Vincent
 
-            ### Vincent
-            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-            cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
-            cm = cmap[0,:,:,0]
-            pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
-            y,x = pos
-            x = -1 if cm[y,x] < 0.999999 else x
-            y,x = math.floor(ky * y), math.floor(kx * x)
-            if x < 0:
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-            else:
-                print("*** Ball detected ***")
-                cv2.circle(frame, (x, y), 16, (255,255,0), 2)
-                x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
-                points_info.append((-1, x_img, y_img, (255,255,0)))
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 1
-            ###
-
             # update tracks
             for track in tracker.tracks:
                 if not track.is_confirmed() or track.time_since_update > 1 or int(track.to_tlbr()[2])-int(track.to_tlbr()[0]) > 110 or int(track.to_tlbr()[3])-int(track.to_tlbr()[1]) > 170: #Vincent
@@ -372,19 +383,19 @@ def main(_argv):
                 ratio_list = [ref_ratio, home_ratio, away_ratio]
                 color_box = None
                 color_text = None
-                #if class_name == 'sports ball':
-                #    color_box = (255,255,0)
-                #    color_text = (0,0,0)
-                #elif min(ratio_list) == ref_ratio:
-                if min(ratio_list) == ref_ratio:
-                    color_box = (255,0,0)
-                    color_text = (255,255,255)
-                elif min(ratio_list) == home_ratio:
-                    color_box = (0,0,255)
-                    color_text = (255,255,255)
-                else:
-                    color_box = (255,255,255)
+                if class_name == 'ball':
+                    color_box = (255,255,0)
                     color_text = (0,0,0)
+                else:
+                    if min(ratio_list) == ref_ratio:
+                        color_box = (255,0,0)
+                        color_text = (255,255,255)
+                    elif min(ratio_list) == home_ratio:
+                        color_box = (0,0,255)
+                        color_text = (255,255,255)
+                    else:
+                        color_box = (255,255,255)
+                        color_text = (0,0,0)
 
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color_box, 2)
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.2f}".format(score))))*17, int(bbox[1])), color_box, -1) #Vincent
