@@ -19,14 +19,6 @@ import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
 
-### Vincent
-from tensorflow import keras
-from tensorflow.keras import backend as K
-import math
-import shutil
-from deep_sort.track import TrackState
-###
-
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
@@ -48,7 +40,14 @@ flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
-flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video') #Vincent
+### Vincent
+from tensorflow import keras
+from tensorflow.keras import backend as K
+import math
+import shutil
+from deep_sort.track import TrackState
+flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video')
+###
 
 def main(_argv):
     # Definition of the parameters
@@ -88,15 +87,16 @@ def main(_argv):
     ### Vincent
     customObj = {'deepball_loss_function': deepball_loss_function, 'deepball_precision': deepball_precision}
     deep_ball_model = keras.models.load_model('./deepballlocal.h5', custom_objects=customObj)
+    #deep_ball_model.summary()
     ###
 
     # begin video capture
-    #try: #Vincent
-    #    vid = cv2.VideoCapture(int(video_path)) #Vincent
-    #except: #Vincent
-    #    vid = cv2.VideoCapture(video_path) #Vincent
-
     ### Vincent
+    #try:
+    #    vid = cv2.VideoCapture(int(video_path))
+    #except:
+    #    vid = cv2.VideoCapture(video_path)
+
     vid_args = video_path.split("+")
     try:
         vid_blue = cv2.VideoCapture(int(vid_args[0]))
@@ -118,19 +118,6 @@ def main(_argv):
     final_vid_len = min([int(vid_blue.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_mid.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_white.get(cv2.CAP_PROP_FRAME_COUNT))])
     if FLAGS.vid_len != -1:
         final_vid_len = FLAGS.vid_len
-
-    """
-    frame_iter_len = max_fps * 15
-    nb_full_frame_iter = final_vid_len // frame_iter_len
-    last_frame_iter_len = final_vid_len % frame_iter_len
-    frame_iter_process_list = []
-    if last_frame_iter_len < max_fps * 5:
-        frame_iter_process_list = [frame_iter_len for i in range(nb_full_frame_iter - 1)]
-        frame_iter_process_list.append(last_frame_iter_len + frame_iter_len)
-    else:
-        frame_iter_process_list = [frame_iter_len for i in range(nb_full_frame_iter)]
-        frame_iter_process_list.append(last_frame_iter_len)
-    """
     ###
 
     out = None
@@ -138,12 +125,11 @@ def main(_argv):
     # get video ready to save locally if flag is set
     if FLAGS.output:
         # by default VideoCapture returns float instead of int
-        #width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)) #Vincent
-        #height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT)) #Vincent
-        #fps = int(vid.get(cv2.CAP_PROP_FPS)) #Vincent
-        width = max_width #Vincent
-        height = max_height #Vincent
-        fps = max_fps #Vincent
+        ### Vincent
+        width = max_width #int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = max_height #int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = max_fps #int(vid.get(cv2.CAP_PROP_FPS))
+        ###
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
@@ -158,31 +144,29 @@ def main(_argv):
     pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
     pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
 
-    # computation of perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
+    # compute each perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
     matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
     matrix_mid = cv2.getPerspectiveTransform(pts_video_mid, pts_map_mid)
     matrix_white = cv2.getPerspectiveTransform(pts_video_white, pts_map_white)
+
+    # create list of videos to process and matrices to use
+    vid_list = [vid_blue, vid_mid, vid_white]
+    matrix_list = [matrix_blue, matrix_mid, matrix_white]
+
+    # create brand new folder to save frames locally
+    shutil.rmtree("processing", ignore_errors = True)
+    os.mkdir("processing")
+
+    # associate a subfolder to each video
+    for i in range(len(vid_list)):
+        os.mkdir("processing/" + str(i+1))
+
+    # switch camera on the angle that detects the ball (mid angle in priority)
+    idx_next_displayed_frame = 1
+    sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(final_vid_len)]
+    tot_rec_points_per_frame = [[] for i in range(final_vid_len)]
     ###
 
-    # switch camera on angle detecting the ball (mid angle in priority)
-    shutil.rmtree("processing", ignore_errors = True)
-    os.mkdir("processing") #Vincent
-    vid_list = [vid_blue, vid_mid, vid_white] #Vincent
-    for i in range(len(vid_list)): #Vincent
-        os.mkdir("processing/" + str(i+1)) #Vincent
-    matrix_list = [matrix_blue, matrix_mid, matrix_white] #Vincent
-    idx_next_displayed_frame = 1 #Vincent
-    #quit_pressed = False #Vincent
-    """
-    for b_idx, nb_frames_to_process in enumerate(frame_iter_process_list): #Vincent
-        min_nb_valid_frames = nb_frames_to_process
-        sngl_frame_state_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
-        #sngl_nb_detections_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
-        sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(nb_frames_to_process)] #Vincent
-        tot_rec_points_per_frame = [None for i in range(nb_frames_to_process)] #Vincent
-    """
-    sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(final_vid_len)] #range(nb_frames_to_process)] #Vincent
-    tot_rec_points_per_frame = [[] for i in range(final_vid_len)] #[None for i in range(nb_frames_to_process)] #Vincent
     for idx, vid in enumerate(vid_list): #Vincent
 
         for track in tracker.tracks: #Vincent
@@ -191,23 +175,23 @@ def main(_argv):
         frame_num = 0
         # while video is running
         while True:
-            #return_value, frame = vid.read() #Vincent
-            #if return_value: #Vincent
-            #    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #Vincent
-            #    image = Image.fromarray(frame) #Vincent
-            #else: #Vincent
-            #    print('Video has ended or failed, try a different video format!') #Vincent
-            #    break #Vincent
-
             ### Vincent
-            if frame_num < final_vid_len: #nb_frames_to_process:
+            #return_value, frame = vid.read()
+            #if return_value:
+            #    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            #    image = Image.fromarray(frame)
+            #else:
+            #    print('Video has ended or failed, try a different video format!')
+            #    break
+
+            if frame_num < final_vid_len:
                 return_value, frame = vid.read()
                 if return_value:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     image = Image.fromarray(frame)
                 else:
-                    if final_vid_len > frame_num: #min_nb_valid_frames > frame_num:
-                        final_vid_len = frame_num #min_nb_valid_frames = frame_num
+                    if final_vid_len > frame_num:
+                        final_vid_len = frame_num
                     print('Video has ended earlier than expected or has failed!')
                     break
             else:
@@ -216,8 +200,7 @@ def main(_argv):
             ###
 
             frame_num +=1
-            #print('Frame #: ', frame_num) #Vincent
-            print('Frame #:', frame_num, 'Vid idx:', idx)#, 'Batch idx:', b_idx) #Vincent
+            print('Frame #:', frame_num, 'Vid idx:', idx) #Vincent
 
             frame_size = frame.shape[:2]
             image_data = cv2.resize(frame, (input_size, input_size))
@@ -299,27 +282,32 @@ def main(_argv):
             scores = np.delete(scores, deleted_indx, axis=0)
 
             ### Vincent
-            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-            #deep_ball_model.summary()
             cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
             cm = cmap[0,:,:,0]
+
             pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
             y,x = pos
+
             scr = cm[y,x]
             x = -1 if scr < 0.999999 else x
+
+            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
             y,x = math.floor(ky * y), math.floor(kx * x)
+
             if x < 0:
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 0
             else:
                 print("*** Ball detected ***")
+                sngl_ball_detected_per_frame[frame_num-1][idx] = 1
+
                 ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
                 bboxes = np.vstack((bboxes, ball_bbox))
                 scores = np.append(scores, scr)
                 names = np.append(names, "ball")
+
                 #cv2.circle(frame, (x, y), 16, (255,105,180), 2)
                 #x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
                 #points_info.append((-1, x_img, y_img, (255,255,0)))
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 1
             ###
 
             # encode yolo detections and feed to tracker
@@ -327,21 +315,32 @@ def main(_argv):
             detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
 
             #initialize color map
-            #cmap = plt.get_cmap('tab20b') #Vincent
-            #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)] #Vincent
-
             ### Vincent
-            ref_low = (17, 15, 75) #red (BGR)
+            #cmap = plt.get_cmap('tab20b')
+            #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+
+            # red mask range (BGR)
+            ref_low = (17, 15, 75)
             ref_high = (50, 56, 200)
-            home_low = (43, 31, 4) #blue (BGR)
+
+            # blue mask range (BGR)
+            home_low = (43, 31, 4)
             home_high = (250, 88, 50)
-            away_low = (187,169,112) #white (BGR)
+
+            # white mask range (BGR)
+            away_low = (187,169,112)
             away_high = (255,255,255)
+
+            # prepare the frame to be masked
             frame_to_mask = np.asarray(frame)
             frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            # create the different masks
             mask_ref = cv2.inRange(frame_to_mask, ref_low, ref_high)
             mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
             mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+
+            # apply each mask on the frame to create three resulting masked frames
             frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
             frame_masked_home = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home)
             frame_masked_away = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away)
@@ -358,7 +357,10 @@ def main(_argv):
             tracker.predict()
             tracker.update(detections)
 
-            points_info = [] #Vincent
+            ### Vincent
+            # initialize the list of recorded detections for the current frame
+            points_info = []
+            ###
 
             # update tracks
             for track in tracker.tracks:
@@ -369,8 +371,9 @@ def main(_argv):
                 score = track.get_score() #Vincent
 
             # draw bbox on screen
-                #color = colors[int(track.track_id) % len(colors)] #Vincent
-                #color = [i * 255 for i in color] #Vincent
+                ### Vincent
+                #color = colors[int(track.track_id) % len(colors)]
+                #color = [i * 255 for i in color]
 
                 crop_image_ref = frame_masked_ref[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
                 crop_image_home = frame_masked_home[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
@@ -396,12 +399,14 @@ def main(_argv):
                     else:
                         color_box = (255,255,255)
                         color_text = (0,0,0)
+                ###
 
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color_box, 2)
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.2f}".format(score))))*17, int(bbox[1])), color_box, -1) #Vincent
                 cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
 
                 ### Vincent
+                # take middle of bbox bottom edge for 3D to 2D coordinates transformation
                 px_vid = (int(bbox[0])+int(bbox[2]))/2
                 py_vid = int(bbox[3])
                 px_img, py_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], px_vid, py_vid)
@@ -413,12 +418,11 @@ def main(_argv):
                     print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
             ### Vincent
-            #sngl_frame_state_per_frame[frame_num-1][idx] = frame
+            # write frame to corresponding folder
             save_path = "processing/" + str(idx+1) + "/" + str(frame_num-1) + ".jpg"
             cv2.imwrite(save_path, frame)
-            #sngl_nb_detections_per_frame[frame_num-1][idx] = len(points_info)
-            #if idx == 0:
-            #    tot_rec_points_per_frame[frame_num-1] = []
+
+            # append recorded detections in frame to list of total recorded detections in all videos for the same time step
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}".format(pi[0], pi[1], pi[2], pi[3]))
@@ -429,24 +433,22 @@ def main(_argv):
             fps = 1.0 / (time.time() - start_time)
             print("FPS: %.2f" % fps)
 
-    for i in range(final_vid_len): #range(min_nb_valid_frames): #Vincent
-        #idx_next_displayed_frame = sngl_nb_detections_per_frame[i].index(max(sngl_nb_detections_per_frame[i])) #Vincent
-        count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0]) #Vincent
-        if count > 0:
-            if count > 1: #Vincent
-                idx_next_displayed_frame = 1 #Vincent
-            else: #Vincent
-                idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i])) #Vincent
-        load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i) + ".jpg"
-        next_displayed_frame = cv2.imread(load_path) #sngl_frame_state_per_frame[i][idx_next_displayed_frame] #Vincent
-
-        #result = np.asarray(frame) #Vincent
-        #result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) #Vincent
-
-        result = np.asarray(next_displayed_frame) #Vincent
-        result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #Vincent
+    for i in range(final_vid_len): #Vincent
 
         ### Vincent
+        # select next frame to display on final video
+        count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0])
+        if count > 0:
+            if count > 1:
+                idx_next_displayed_frame = 1
+            else:
+                idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
+        load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i) + ".jpg"
+        next_displayed_frame = cv2.imread(load_path)
+        result = np.asarray(next_displayed_frame) #np.asarray(frame)
+        result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # draw the four points of video landmark area
         pts_displayed_frame = None
         if idx_next_displayed_frame == 0:
             pts_displayed_frame = pts_video_blue
@@ -459,7 +461,7 @@ def main(_argv):
         cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
         cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
 
-        # plotting bird’s-eye view
+        # load bird’s-eye view image and draw every landmark areas points and each detection 2D spatial representation
         bird_eye = cv2.imread("data/img/football_field.jpg")
         pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
         for pts_map in pts_map_list:
@@ -470,17 +472,18 @@ def main(_argv):
         for pi in tot_rec_points_per_frame[i]:
             cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
 
-        # shrinking bird eye view image
+        # shrink bird's-eye view image
         scale_percent = 60
         new_width = int(bird_eye.shape[1] * scale_percent / 100)
         new_height = int(bird_eye.shape[0] * scale_percent / 100)
         bird_eye = cv2.resize(bird_eye, (new_width, new_height), interpolation = cv2.INTER_AREA)
 
+        # plot bird's-eye view image
         result_height, result_width = result.shape[:2]
         bird_eye_height, bird_eye_width = bird_eye.shape[:2]
         result[ int(result_height-bird_eye_height-50):int(result_height-50) , int((result_width/2)-(bird_eye_width/2)):int((result_width/2)+(bird_eye_width/2)) ] = bird_eye
 
-        # adapting final frame dimensions to output writer
+        # adapt final frame dimensions to output writer
         if result_height != max_height or result_width != max_width:
             result = cv2.resize(result, (max_width, max_height))
         ###
@@ -492,24 +495,24 @@ def main(_argv):
         if FLAGS.output:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            #quit_pressed = True
             break
-    #if quit_pressed:
-    #    break
+
     cv2.destroyAllWindows()
 
 ### Vincent
 def black_pixels_ratio(crop_image):
-    #Get frame height and width to access pixels
+    # get frame height and width to access pixels
     height, width, _ = crop_image.shape
     if height == 0 or width == 0:
         return 1.0
-    #Accessing BGR pixel values
+
+    # access BGR pixel values on each channel
     count = 0
     for x in range(0, width) :
          for y in range(0, height) :
-             if crop_image[y,x,0] == 0 and crop_image[y,x,1] == 0 and crop_image[y,x,2] == 0: #BGR Channel Value
+             if crop_image[y,x,0] == 0 and crop_image[y,x,1] == 0 and crop_image[y,x,2] == 0:
                 count += 1
+
     return count/(height*width)
 
 def transform_coordinates_from_3D_to_2D(matrix, px_vid, py_vid):
