@@ -375,14 +375,8 @@ def main(_argv):
 
             ### Vincent
             # retrieve interval of valid bboxes position on y axis
-            lower_limit = None
-            upper_limit = None
-            if idx == 0:
-                lower_limit, upper_limit = 92, 1038
-            elif idx == 1:
-                lower_limit, upper_limit = 90, 1028
-            else:
-                lower_limit, upper_limit = 102, 1032
+            lower_limit = 98
+            upper_limit = 1038
 
             # initialize the list of recorded detections for the current frame
             points_info = []
