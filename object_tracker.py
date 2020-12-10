@@ -150,7 +150,7 @@ def main(_argv):
     pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
 
     # create polygon for mid side camera angle on 2D map
-    mid_coords_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[1][0], pts_map_mid[1][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1])]
+    mid_coords_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
     mid_side_poly = Polygon(mid_coords_poly)
 
     # compute each perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
