@@ -457,7 +457,12 @@ def main(_argv):
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}".format(pi[0], pi[1], pi[2], pi[3]))
-                tot_rec_points_per_frame[frame_num-1].append(pi)
+                if idx != 1:
+                    curr_point = Point(pi[1], pi[2])
+                    if not curr_point.within(mid_side_poly):
+                        tot_rec_points_per_frame[frame_num-1].append(pi)
+                else:
+                    tot_rec_points_per_frame[frame_num-1].append(pi)
             ###
 
             # calculate frames per second of running detections
@@ -501,12 +506,7 @@ def main(_argv):
             cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 2, (255,0,0),cv2.FILLED)
             cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 2, (255,0,255),cv2.FILLED)
         for pi in tot_rec_points_per_frame[i]:
-            if idx_next_displayed_frame != 1:
-                curr_point = Point(pi[1], pi[2])
-                if not curr_point.within(mid_side_poly):
-                    cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
-            else:
-                cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+            cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
 
         # shrink bird's-eye view image
         scale_percent = 60
