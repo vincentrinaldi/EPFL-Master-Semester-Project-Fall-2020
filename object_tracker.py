@@ -144,14 +144,22 @@ def main(_argv):
     pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
     pts_video_white = np.float32([[0,98],[1642,98],[0,1038],[1920,1038]]) #White side 1
 
+    # create polygons delimiting each side of the field on video
+    blue_coords_field_poly = [(pts_video_blue[0][0], pts_video_blue[0][1]), (0, 460), (pts_video_blue[2][0], pts_video_blue[2][1]), (pts_video_blue[3][0], pts_video_blue[3][1]), (pts_video_blue[1][0], pts_video_blue[1][1])]
+    blue_side_field_poly = Polygon(blue_coords_field_poly)
+    mid_coords_field_poly = [(pts_video_mid[0][0], pts_video_mid[0][1]), (pts_video_mid[2][0], pts_video_mid[2][1]), (pts_video_mid[3][0], pts_video_mid[3][1]), (pts_video_mid[1][0], pts_video_mid[1][1])]
+    mid_side_field_poly = Polygon(mid_coords_field_poly)
+    white_coords_field_poly = [(pts_video_white[0][0], pts_video_white[0][1]), (pts_video_white[2][0], pts_video_white[2][1]), (pts_video_white[3][0], pts_video_white[3][1]), (1920, 460), (pts_video_white[1][0], pts_video_white[1][1])]
+    white_side_field_poly = Polygon(white_coords_field_poly)
+
     # img size is 498x321
     pts_map_blue = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
     pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
     pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
 
     # create polygon for mid side camera angle on 2D map
-    mid_coords_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
-    mid_side_poly = Polygon(mid_coords_poly)
+    mid_coords_map_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
+    mid_side_map_poly = Polygon(mid_coords_map_poly)
 
     # compute each perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
     matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
@@ -217,6 +225,9 @@ def main(_argv):
             # resize frame to greatest existing dimensions among all processed video
             if frame_size[0] != max_height or frame_size[1] != max_width:
                 frame = cv2.resize(frame, (max_width, max_height))
+
+            # initialize the list of recorded detections for the current frame
+            points_info = []
             ###
 
             image_data = cv2.resize(frame, (input_size, input_size))
@@ -310,13 +321,21 @@ def main(_argv):
             ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
             y,x = math.floor(ky * y), math.floor(kx * x)
 
+            if not x < 0:
+                curr_ball_loc = Point(x, y+12)
+                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
+                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
+                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
+                invalid_ball_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
+                x = -1 if invalid_ball_pos else x
+
             if x < 0:
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 0
             else:
                 print("*** Ball detected ***")
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 1
 
-                ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
+                ball_bbox = np.array([x-12, y-12, 24, 24], dtype='f')
                 bboxes = np.vstack((bboxes, ball_bbox))
                 scores = np.append(scores, scr)
                 names = np.append(names, "ball")
@@ -373,15 +392,6 @@ def main(_argv):
             tracker.predict()
             tracker.update(detections)
 
-            ### Vincent
-            # retrieve interval of valid bboxes position on y axis
-            lower_limit = 98
-            upper_limit = 1038
-
-            # initialize the list of recorded detections for the current frame
-            points_info = []
-            ###
-
             # update tracks
             for track in tracker.tracks:
 
@@ -389,10 +399,16 @@ def main(_argv):
                 # compute current bbox properties
                 curr_bbox_width = int(track.to_tlbr()[2])-int(track.to_tlbr()[0])
                 curr_bbox_height = int(track.to_tlbr()[3])-int(track.to_tlbr()[1])
-                curr_bbox_pos_y_axis = int(track.to_tlbr()[3])
+                curr_bbox_x = (int(track.to_tlbr()[0])+int(track.to_tlbr()[2]))/2
+                curr_bbox_y = int(track.to_tlbr()[3])
+                curr_bbox_pos = Point(curr_bbox_x, curr_bbox_y)
+                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_bbox_pos.within(blue_side_field_poly)
+                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_bbox_pos.within(mid_side_field_poly)
+                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_bbox_pos.within(white_side_field_poly)
+                bool_invalid_bbox_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
 
                 # compute boolean on current bbox properties
-                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or curr_bbox_pos_y_axis < lower_limit or curr_bbox_pos_y_axis > upper_limit
+                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or bool_invalid_bbox_pos
                 ###
 
                 if not track.is_confirmed() or track.time_since_update > 1 or bool_curr_bbox_properties: #Vincent
@@ -433,8 +449,8 @@ def main(_argv):
                 ###
 
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color_box, 2)
-                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.2f}".format(score))))*17, int(bbox[1])), color_box, -1) #Vincent
-                cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.2f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
+                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id))+len(str("{:.7f}".format(score))))*17, int(bbox[1])), color_box, -1) #Vincent
+                cv2.putText(frame, class_name + "-" + str(track.track_id) + "-" + str("{:.7f}".format(score)),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, color_text,2) #Vincent
 
                 ### Vincent
                 # take middle of bbox bottom edge for 3D to 2D coordinates transformation
@@ -450,7 +466,7 @@ def main(_argv):
 
             ### Vincent
             # write frame to corresponding folder
-            save_path = "processing/" + str(idx+1) + "/" + str(frame_num-1) + ".jpg"
+            save_path = "processing/" + str(idx+1) + "/" + str(frame_num) + ".jpg"
             cv2.imwrite(save_path, frame)
 
             # append recorded detections in frame to list of total recorded detections in all videos for the same time step
@@ -459,7 +475,7 @@ def main(_argv):
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}".format(pi[0], pi[1], pi[2], pi[3]))
                 if idx != 1:
                     curr_point = Point(pi[1], pi[2])
-                    if not curr_point.within(mid_side_poly):
+                    if not curr_point.within(mid_side_map_poly):
                         tot_rec_points_per_frame[frame_num-1].append(pi)
                 else:
                     tot_rec_points_per_frame[frame_num-1].append(pi)
@@ -479,7 +495,7 @@ def main(_argv):
                 idx_next_displayed_frame = 1
             else:
                 idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
-        load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i) + ".jpg"
+        load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i+1) + ".jpg"
         next_displayed_frame = cv2.imread(load_path)
         result = np.asarray(next_displayed_frame) #np.asarray(frame)
         result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -487,10 +503,12 @@ def main(_argv):
         # draw the four points of video landmark area
         pts_displayed_frame = None
         if idx_next_displayed_frame == 0:
+            cv2.circle(result, (0, 460), 2, (0,255,255),cv2.FILLED)
             pts_displayed_frame = pts_video_blue
         elif idx_next_displayed_frame == 1:
             pts_displayed_frame = pts_video_mid
         else:
+            cv2.circle(result, (1920, 460), 2, (0,255,255),cv2.FILLED)
             pts_displayed_frame = pts_video_white
         cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
         cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
@@ -499,6 +517,8 @@ def main(_argv):
 
         # load bird’s-eye view image and draw every landmark areas points and each detection 2D spatial representation
         bird_eye = cv2.imread("data/img/football_field.jpg")
+        cv2.circle(bird_eye, (0, 180), 2, (0,255,255),cv2.FILLED)
+        cv2.circle(bird_eye, (497, 180), 2, (0,255,255),cv2.FILLED)
         pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
         for pts_map in pts_map_list:
             cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 2, (0,0,255),cv2.FILLED)
