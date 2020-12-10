@@ -41,10 +41,11 @@ flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
 ### Vincent
-from tensorflow import keras
-from tensorflow.keras import backend as K
 import math
 import shutil
+from shapely.geometry import Point, Polygon
+from tensorflow import keras
+from tensorflow.keras import backend as K
 from deep_sort.track import TrackState
 flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video')
 ###
@@ -85,6 +86,10 @@ def main(_argv):
         infer = saved_model_loaded.signatures['serving_default']
 
     ### Vincent
+    def deepball_loss_function(y_true, y_pred):
+        pass
+    def deepball_precision(y_true, y_pred):
+        pass
     customObj = {'deepball_loss_function': deepball_loss_function, 'deepball_precision': deepball_precision}
     deep_ball_model = keras.models.load_model('./deepballlocal.h5', custom_objects=customObj)
     #deep_ball_model.summary()
@@ -135,14 +140,18 @@ def main(_argv):
 
     ### Vincent
     # video size is 1920x1080 for blue and mid & 1920x1088 for white
-    pts_video_blue = np.float32([[278,92],[1920,92],[0,1038],[1920,1038]]) #Blue side 1
-    pts_video_mid = np.float32([[0,90],[1920,90],[0,1028],[1920,1028]]) #Mid side 1
-    pts_video_white = np.float32([[0,102],[1642,102],[0,1032],[1920,1032]]) #White side 1
+    pts_video_blue = np.float32([[278,98],[1920,98],[0,1038],[1920,1038]]) #Blue side 1
+    pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
+    pts_video_white = np.float32([[0,98],[1642,98],[0,1038],[1920,1038]]) #White side 1
 
     # img size is 498x321
     pts_map_blue = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
     pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
     pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
+
+    # create polygon for mid side camera angle on 2D map
+    mid_coords_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[1][0], pts_map_mid[1][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1])]
+    mid_side_poly = Polygon(mid_coords_poly)
 
     # compute each perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas
     matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
@@ -203,6 +212,13 @@ def main(_argv):
             print('Frame #:', frame_num, 'Vid idx:', idx) #Vincent
 
             frame_size = frame.shape[:2]
+
+            ### Vincent
+            # resize frame to greatest existing dimensions among all processed video
+            if frame_size[0] != max_height or frame_size[1] != max_width:
+                frame = cv2.resize(frame, (max_width, max_height))
+            ###
+
             image_data = cv2.resize(frame, (input_size, input_size))
             image_data = image_data / 255.
             image_data = image_data[np.newaxis, ...].astype(np.float32)
@@ -358,13 +374,34 @@ def main(_argv):
             tracker.update(detections)
 
             ### Vincent
+            # retrieve interval of valid bboxes position on y axis
+            lower_limit = None
+            upper_limit = None
+            if idx == 0:
+                lower_limit, upper_limit = 92, 1038
+            elif idx == 1:
+                lower_limit, upper_limit = 90, 1028
+            else:
+                lower_limit, upper_limit = 102, 1032
+
             # initialize the list of recorded detections for the current frame
             points_info = []
             ###
 
             # update tracks
             for track in tracker.tracks:
-                if not track.is_confirmed() or track.time_since_update > 1 or int(track.to_tlbr()[2])-int(track.to_tlbr()[0]) > 110 or int(track.to_tlbr()[3])-int(track.to_tlbr()[1]) > 170: #Vincent
+
+                ### Vincent
+                # compute current bbox properties
+                curr_bbox_width = int(track.to_tlbr()[2])-int(track.to_tlbr()[0])
+                curr_bbox_height = int(track.to_tlbr()[3])-int(track.to_tlbr()[1])
+                curr_bbox_pos_y_axis = int(track.to_tlbr()[3])
+
+                # compute boolean on current bbox properties
+                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or curr_bbox_pos_y_axis < lower_limit or curr_bbox_pos_y_axis > upper_limit
+                ###
+
+                if not track.is_confirmed() or track.time_since_update > 1 or bool_curr_bbox_properties: #Vincent
                     continue
                 bbox = track.to_tlbr()
                 class_name = track.get_class()
@@ -470,7 +507,12 @@ def main(_argv):
             cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 2, (255,0,0),cv2.FILLED)
             cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 2, (255,0,255),cv2.FILLED)
         for pi in tot_rec_points_per_frame[i]:
-            cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+            if idx_next_displayed_frame != 1:
+                curr_point = Point(pi[1], pi[2])
+                if not curr_point.within(mid_side_poly):
+                    cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+            else:
+                cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
 
         # shrink bird's-eye view image
         scale_percent = 60
@@ -482,10 +524,6 @@ def main(_argv):
         result_height, result_width = result.shape[:2]
         bird_eye_height, bird_eye_width = bird_eye.shape[:2]
         result[ int(result_height-bird_eye_height-50):int(result_height-50) , int((result_width/2)-(bird_eye_width/2)):int((result_width/2)+(bird_eye_width/2)) ] = bird_eye
-
-        # adapt final frame dimensions to output writer
-        if result_height != max_height or result_width != max_width:
-            result = cv2.resize(result, (max_width, max_height))
         ###
 
         if not FLAGS.dont_show:
@@ -519,41 +557,6 @@ def transform_coordinates_from_3D_to_2D(matrix, px_vid, py_vid):
     px_img = (matrix[0][0]*px_vid + matrix[0][1]*py_vid + matrix[0][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
     py_img = (matrix[1][0]*px_vid + matrix[1][1]*py_vid + matrix[1][2]) / ((matrix[2][0]*px_vid + matrix[2][1]*py_vid + matrix[2][2]))
     return int(px_img), int(py_img)
-###
-
-### Vincent
-def deepball_loss_function(y_true, y_pred):
-    # y_true (batch_size, 68, 120, 2)
-    # y_pred (batch_size, 68, 120, 2)
-
-    ball_gt, bg_gt = y_true[:,:,:,0], y_true[:,:,:,1]
-    N = K.sum(ball_gt, axis=(1,2)) + 1
-    M = K.sum(bg_gt, axis=(1,2)) + 1
-    zer = K.zeros_like(ball_gt)
-
-    y_pred = K.log(y_pred)
-    ball_cm = y_pred[:,:,:,0]
-    bg_cm = y_pred[:,:,:,1]
-
-    Lpos = K.sum(zer + (ball_cm * ball_gt), axis=(1,2))
-    Lpos = K.sum(K.zeros_like(N) + (Lpos / tf.maximum(1.0, N)))
-
-    Lneg = K.sum(zer + (bg_cm * bg_gt), axis=(1,2))
-    Lneg = K.sum(K.zeros_like(M) + (Lneg / tf.maximum(1.0, M)))
-    #print(K.eval(Lpos),K.eval(Lneg))
-
-    # Multiplying by batch_size as Keras automatically averages the scalar output over it
-    return (-Lpos - 0.3*Lneg) * 16
-
-def deepball_precision(y_true, y_pred):
-    ball_gt = y_true[:,:,:,0]
-    ball_cm = y_pred[:,:,:,0]
-
-    thre_ball_cm = K.cast(K.greater(ball_cm, 0.998), "float32")
-    tp = K.sum(ball_gt * thre_ball_cm)
-    totalp = K.sum(K.max(thre_ball_cm, axis=(1,2)))
-
-    return tp/tf.maximum(1.0, totalp)
 ###
 
 if __name__ == '__main__':
