@@ -182,6 +182,9 @@ def main(_argv):
     idx_next_displayed_frame = 1
     sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(final_vid_len)]
     tot_rec_points_per_frame = [[] for i in range(final_vid_len)]
+
+    idx_next_temp_prev = None
+    valid_frame_detection_in_a_row = 0
     ###
 
     for idx, vid in enumerate(vid_list): #Vincent
@@ -316,7 +319,7 @@ def main(_argv):
             y,x = pos
 
             scr = cm[y,x]
-            x = -1 if scr < 0.999999 else x
+            x = -1 if scr < 0.99995 else x
 
             ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
             y,x = math.floor(ky * y), math.floor(kx * x)
@@ -333,14 +336,14 @@ def main(_argv):
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 0
             else:
                 print("*** Ball detected ***")
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 1
+                sngl_ball_detected_per_frame[frame_num-1][idx] = scr
 
                 ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
                 bboxes = np.vstack((bboxes, ball_bbox))
                 scores = np.append(scores, scr)
                 names = np.append(names, "ball")
 
-                #cv2.circle(frame, (x, y), 16, (255,105,180), 2)
+                cv2.circle(frame, (x, y), 16, (255,105,180), 5)
                 #x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
                 #points_info.append((-1, x_img, y_img, (255,255,0)))
             ###
@@ -491,10 +494,30 @@ def main(_argv):
         # select next frame to display on final video
         count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0])
         if count > 0:
-            if count > 1:
-                idx_next_displayed_frame = 1
+            idx_next_temp = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
+            if idx_next_temp != idx_next_displayed_frame:
+                if idx_next_temp_prev == None:
+                    idx_next_temp_prev = idx_next_temp
+                    valid_frame_detection_in_a_row += 1
+                elif idx_next_temp == idx_next_temp_prev:
+                    valid_frame_detection_in_a_row += 1
+                else:
+                    idx_next_temp_prev = None
+                    valid_frame_detection_in_a_row = 0
             else:
-                idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
+                idx_next_temp_prev = None
+                valid_frame_detection_in_a_row = 0
+            if valid_frame_detection_in_a_row == 5:
+                idx_next_temp_prev = None
+                valid_frame_detection_in_a_row = 0
+                idx_next_displayed_frame = idx_next_temp
+            #if count > 1:
+            #    idx_next_displayed_frame = 1
+            #else:
+            #    idx_next_displayed_frame = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
+        else:
+            idx_next_temp_prev = None
+            valid_frame_detection_in_a_row = 0
         load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i+1) + ".jpg"
         next_displayed_frame = cv2.imread(load_path)
         result = np.asarray(next_displayed_frame) #np.asarray(frame)
