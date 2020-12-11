@@ -322,7 +322,7 @@ def main(_argv):
             y,x = math.floor(ky * y), math.floor(kx * x)
 
             if not x < 0:
-                curr_ball_loc = Point(x, y+12)
+                curr_ball_loc = Point(x, y+16)
                 in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
                 in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
                 in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
@@ -335,7 +335,7 @@ def main(_argv):
                 print("*** Ball detected ***")
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 1
 
-                ball_bbox = np.array([x-12, y-12, 24, 24], dtype='f')
+                ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
                 bboxes = np.vstack((bboxes, ball_bbox))
                 scores = np.append(scores, scr)
                 names = np.append(names, "ball")
