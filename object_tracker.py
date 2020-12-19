@@ -185,9 +185,16 @@ def main(_argv):
 
     idx_next_temp_prev = None
     valid_frame_detection_in_a_row = 0
+
+    first_ball_detection = False #Test
     ###
 
     for idx, vid in enumerate(vid_list): #Vincent
+
+        pos_range_x = 75 #Test
+        pos_range_y = 75 #Test
+        prev_pos_x = None #Test
+        prev_pos_y = None #Test
 
         for track in tracker.tracks: #Vincent
             track.state = TrackState.Deleted #Vincent
@@ -319,33 +326,78 @@ def main(_argv):
             y,x = pos
 
             scr = cm[y,x]
-            x = -1 if scr < 0.99995 else x
+            print(scr) #Test
+
+            cv2.rectangle(frame, (0,0), (150,50), (255,0,0), -1) #Test
+            cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+            x = -1 if scr < 0.999 else x #Test (change 0.99995 to 0.999)
 
             ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
             y,x = math.floor(ky * y), math.floor(kx * x)
 
             if not x < 0:
-                curr_ball_loc = Point(x, y+16)
+                curr_ball_loc = Point(x, y+12) #Test (change 16 to 12)
                 in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
                 in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
                 in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
                 invalid_ball_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
                 x = -1 if invalid_ball_pos else x
 
-            if x < 0:
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-            else:
+            #if x < 0:
+            #    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+            #else:
+            if not x < 0: #Test
                 print("*** Ball detected ***")
-                sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                cv2.rectangle(frame, (0,0), (150,50), (0,0,255), -1) #Test
+                cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+                
+                #sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                #Test
+                if scr < 0.99999:
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+                else:
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                ###
 
-                ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f')
-                bboxes = np.vstack((bboxes, ball_bbox))
-                scores = np.append(scores, scr)
-                names = np.append(names, "ball")
+                #ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f') #Test
+                #bboxes = np.vstack((bboxes, ball_bbox)) #Test
+                #scores = np.append(scores, scr) #Test
+                #names = np.append(names, "ball") #Test
 
-                cv2.circle(frame, (x, y), 16, (255,105,180), 5)
-                #x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
-                #points_info.append((-1, x_img, y_img, (255,255,0)))
+                if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999: #Test
+                    print("*** Ball drawn ***") #Test
+                    cv2.rectangle(frame, (0,0), (150,50), (0,255,0), -1) #Test
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y) #Test
+                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
+
+                    pos_range_x = 75 #Test
+                    pos_range_y = 75 #Test
+                    prev_pos_x = x #Test
+                    prev_pos_y = y #Test
+                elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y: #Test
+                    print("*** Ball drawn ***") #Test
+                    cv2.rectangle(frame, (0,0), (150,50), (0,255,0), -1) #Test
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+                    
+                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
+
+                    pos_range_x = 75 #Test
+                    pos_range_y = 75 #Test
+                    prev_pos_x = x #Test
+                    prev_pos_y = y #Test
+                else:
+                    pos_range_x += 75 #Test
+                    pos_range_y += 75 #Test
+            else: #Test
+                sngl_ball_detected_per_frame[frame_num-1][idx] = 0 #Test
+                pos_range_x += 75 #Test
+                pos_range_y += 75 #Test
             ###
 
             # encode yolo detections and feed to tracker
@@ -356,6 +408,29 @@ def main(_argv):
             ### Vincent
             #cmap = plt.get_cmap('tab20b')
             #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+			
+			# Background Substraction and HSV Conversion
+            #foreGroundMask = backSub.apply(frame) (create backSub = cv2.createBackgroundSubstractorKNN())
+            #frame_backSub = cv2.bitwise_and(frame, frame, mask = backSub)
+            #frame_to_mask = np.asarray(frame_backSub)
+            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+
+            # Colors
+            # Range of H values :
+            #red = 165 to 179 & 0 to 14 (use mask = cv2.bitwise_or(mask1,mask2))
+            #yellow = 15 to 44
+            #green = 45 to 74
+            #cyan = 75 to 104
+            #blue = 105 to 134
+            #magenta = 135 to 164
+            # S values are 25 to 255
+            # V values are 125 to 255
+
+            # Non colors
+            # H values are 0 to 255
+            # Range of S and V values :
+            #white = 0 to 24 // 125 to 255
+            #black = 0 to 255 // 0 to 124
 
             # red mask range (BGR)
             ref_low = (17, 15, 75)
@@ -460,7 +535,7 @@ def main(_argv):
                 px_vid = (int(bbox[0])+int(bbox[2]))/2
                 py_vid = int(bbox[3])
                 px_img, py_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], px_vid, py_vid)
-                points_info.append((track.track_id, px_img, py_img, color_box))
+                points_info.append((track.track_id, px_img, py_img, color_box, idx)) #Test
                 ###
 
             # if enable info flag then print details about each track
@@ -475,7 +550,7 @@ def main(_argv):
             # append recorded detections in frame to list of total recorded detections in all videos for the same time step
             for pi in points_info:
                 if FLAGS.info:
-                    print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}".format(pi[0], pi[1], pi[2], pi[3]))
+                    print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}, Video idx: {}".format(pi[0], pi[1], pi[2], pi[3], pi[4])) #Test
                 if idx != 1:
                     curr_point = Point(pi[1], pi[2])
                     if not curr_point.within(mid_side_map_poly):
@@ -507,10 +582,14 @@ def main(_argv):
             else:
                 idx_next_temp_prev = None
                 valid_frame_detection_in_a_row = 0
-            if valid_frame_detection_in_a_row == 5:
+            if valid_frame_detection_in_a_row == 4: #Test (change 5 to 4)
                 idx_next_temp_prev = None
                 valid_frame_detection_in_a_row = 0
                 idx_next_displayed_frame = idx_next_temp
+
+                if not first_ball_detection: #Test
+                    first_ball_detection = True #Test
+                
             #if count > 1:
             #    idx_next_displayed_frame = 1
             #else:
@@ -544,12 +623,17 @@ def main(_argv):
         cv2.circle(bird_eye, (497, 180), 2, (0,255,255),cv2.FILLED)
         pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
         for pts_map in pts_map_list:
-            cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 2, (0,0,255),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[1][0], pts_map[1][1]), 2, (0,255,0),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 2, (255,0,0),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 2, (255,0,255),cv2.FILLED)
+            cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 1, (0,0,255),cv2.FILLED) #Test (change 2 to 1)
+            cv2.circle(bird_eye, (pts_map[1][0], pts_map[1][1]), 1, (0,255,0),cv2.FILLED) #Test (change 2 to 1)
+            cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 1, (255,0,0),cv2.FILLED) #Test (change 2 to 1)
+            cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 1, (255,0,255),cv2.FILLED) #Test (change 2 to 1)
         for pi in tot_rec_points_per_frame[i]:
-            cv2.circle(bird_eye, (pi[1], pi[2]), 5, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+            if first_ball_detection or pi[0] != 0: #Test
+                if pi[0] == 0: #Test
+                    if pi[4] == idx_next_displayed_frame: #Test
+                        cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED) #Test
+                else: #Test
+                    cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED) #Test (change 5 to 3)
 
         # shrink bird's-eye view image
         scale_percent = 60
