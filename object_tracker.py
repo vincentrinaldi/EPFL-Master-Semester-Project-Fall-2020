@@ -343,14 +343,15 @@ def main(_argv):
 			# Background Substraction and HSV Conversion
             foreGroundMask = backSub.apply(frame)
             frame_backSub = cv2.bitwise_and(frame, frame, mask = foreGroundMask)
-            save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg" #For Testing
-            cv2.imwrite(save_path, frame_backSub) #For Testing
-            #frame_to_mask = np.asarray(frame_backSub)
-            #frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV)
+            #save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg" #For Testing
+            #cv2.imwrite(save_path, frame_backSub) #For Testing
+            frame_to_mask = np.asarray(frame_backSub)
+            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2BGR) #HSV
 
+            """
             # Colors
             # Range of H values :
-            #red = 165 to 179 & 0 to 14 (use mask = cv2.bitwise_or(mask1,mask2))
+            #red = 165 to 179 & 0 to 14
             #yellow = 15 to 44
             #green = 45 to 74
             #cyan = 75 to 104
@@ -365,6 +366,27 @@ def main(_argv):
             #white = 0 to 24 // 125 to 255
             #black = 0 to 255 // 0 to 124
 
+            # red mask range (HSV)
+            ref_low_1 = (0, 25, 125)
+            ref_high_1 = (14, 255, 255)
+            ref_low_2 = (165, 25, 125)
+            ref_high_2 = (179, 255, 255)
+
+            # blue mask range (HSV)
+            home_low = (105, 25, 125)
+            home_high = (134, 255, 255)
+
+            # white mask range (HSV)
+            away_low = (0,0,125)
+            away_high = (255,24,255)
+
+            mask_ref_1 = cv2.inRange(frame_to_mask, ref_low_1, ref_high_1)
+            mask_ref_2 = cv2.inRange(frame_to_mask, ref_low_2, ref_high_2)
+            mask_ref = cv2.bitwise_or(mask_ref_1, mask_ref_2)
+            mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
+            mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+            """
+
             # red mask range (BGR)
             ref_low = (17, 15, 75)
             ref_high = (50, 56, 200)
@@ -378,14 +400,14 @@ def main(_argv):
             away_high = (255,255,255)
 
             # prepare the frame to be masked
-            frame_to_mask = np.asarray(frame)
-            frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            #frame_to_mask = np.asarray(frame)
+            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
             # create the different masks
             mask_ref = cv2.inRange(frame_to_mask, ref_low, ref_high)
             mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
             mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
-
+            
             # apply each mask on the frame to create three resulting masked frames
             frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
             frame_masked_home = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home)
@@ -402,7 +424,7 @@ def main(_argv):
             scr = cm[y,x]
             print(scr) #Test
 
-            cv2.rectangle(frame, (0,0), (200,50), (255,0,0), -1) #Test
+            cv2.rectangle(frame, (0,0), (250,50), (255,0,0), -1) #Test
             cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
             x = -1 if scr < 0.999 else x #Test (change 0.99995 to 0.999)
@@ -423,7 +445,7 @@ def main(_argv):
             #else:
             if not x < 0: #Test
                 print("*** Ball detected ***")
-                cv2.rectangle(frame, (0,0), (200,50), (0,0,255), -1) #Test
+                cv2.rectangle(frame, (0,0), (250,50), (0,0,255), -1) #Test
                 cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                 #sngl_ball_detected_per_frame[frame_num-1][idx] = scr
@@ -441,7 +463,7 @@ def main(_argv):
 
                 if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999: #Test
                     print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (200,50), (0,255,0), -1) #Test
+                    cv2.rectangle(frame, (0,0), (250,50), (0,255,0), -1) #Test
                     cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
@@ -454,7 +476,7 @@ def main(_argv):
                     prev_pos_y = y #Test
                 elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y: #Test
                     print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (200,50), (0,255,0), -1) #Test
+                    cv2.rectangle(frame, (0,0), (250,50), (0,255,0), -1) #Test
                     cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
@@ -515,19 +537,19 @@ def main(_argv):
                 ratio_list = [ref_ratio, home_ratio, away_ratio]
                 color_box = None
                 color_text = None
-                if class_name == 'ball':
-                    color_box = (255,255,0)
-                    color_text = (0,0,0)
+                #if class_name == 'ball':
+                #    color_box = (255,255,0)
+                #    color_text = (0,0,0)
+                #else:
+                if min(ratio_list) == ref_ratio:
+                    color_box = (255,0,0)
+                    color_text = (255,255,255)
+                elif min(ratio_list) == home_ratio:
+                    color_box = (0,0,255)
+                    color_text = (255,255,255)
                 else:
-                    if min(ratio_list) == ref_ratio:
-                        color_box = (255,0,0)
-                        color_text = (255,255,255)
-                    elif min(ratio_list) == home_ratio:
-                        color_box = (0,0,255)
-                        color_text = (255,255,255)
-                    else:
-                        color_box = (255,255,255)
-                        color_text = (0,0,0)
+                    color_box = (255,255,255)
+                    color_text = (0,0,0)
                 ###
 
                 cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color_box, 2)
@@ -555,7 +577,7 @@ def main(_argv):
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}, Video idx: {}".format(pi[0], pi[1], pi[2], pi[3], pi[4])) #Test
-                if idx != 1 or pi[0] == 0:
+                if idx != 1 and pi[0] != 0:
                     curr_point = Point(pi[1], pi[2])
                     if not curr_point.within(mid_side_map_poly):
                         tot_rec_points_per_frame[frame_num-1].append(pi)
