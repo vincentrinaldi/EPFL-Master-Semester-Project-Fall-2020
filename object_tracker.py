@@ -402,7 +402,7 @@ def main(_argv):
             scr = cm[y,x]
             print(scr) #Test
 
-            cv2.rectangle(frame, (0,0), (150,50), (255,0,0), -1) #Test
+            cv2.rectangle(frame, (0,0), (200,50), (255,0,0), -1) #Test
             cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
             x = -1 if scr < 0.999 else x #Test (change 0.99995 to 0.999)
@@ -423,7 +423,7 @@ def main(_argv):
             #else:
             if not x < 0: #Test
                 print("*** Ball detected ***")
-                cv2.rectangle(frame, (0,0), (150,75), (0,0,255), -1) #Test
+                cv2.rectangle(frame, (0,0), (200,50), (0,0,255), -1) #Test
                 cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                 #sngl_ball_detected_per_frame[frame_num-1][idx] = scr
@@ -441,7 +441,7 @@ def main(_argv):
 
                 if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999: #Test
                     print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (150,75), (0,255,0), -1) #Test
+                    cv2.rectangle(frame, (0,0), (200,50), (0,255,0), -1) #Test
                     cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
@@ -454,7 +454,7 @@ def main(_argv):
                     prev_pos_y = y #Test
                 elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y: #Test
                     print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (150,75), (0,255,0), -1) #Test
+                    cv2.rectangle(frame, (0,0), (200,50), (0,255,0), -1) #Test
                     cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
