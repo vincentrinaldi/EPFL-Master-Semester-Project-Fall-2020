@@ -191,6 +191,8 @@ def main(_argv):
 
     for idx, vid in enumerate(vid_list): #Vincent
 
+        backSub = cv2.createBackgroundSubtractorKNN() #Testing Phase
+
         pos_range_x = 75 #Test
         pos_range_y = 75 #Test
         prev_pos_x = None #Test
@@ -318,102 +320,33 @@ def main(_argv):
             bboxes = np.delete(bboxes, deleted_indx, axis=0)
             scores = np.delete(scores, deleted_indx, axis=0)
 
-            ### Vincent
-            cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
-            cm = cmap[0,:,:,0]
-
-            pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
-            y,x = pos
-
-            scr = cm[y,x]
-            print(scr) #Test
-
-            cv2.rectangle(frame, (0,0), (150,50), (255,0,0), -1) #Test
-            cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
-
-            x = -1 if scr < 0.999 else x #Test (change 0.99995 to 0.999)
-
-            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
-            y,x = math.floor(ky * y), math.floor(kx * x)
-
-            if not x < 0:
-                curr_ball_loc = Point(x, y+12) #Test (change 16 to 12)
-                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
-                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
-                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
-                invalid_ball_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
-                x = -1 if invalid_ball_pos else x
-
-            #if x < 0:
-            #    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-            #else:
-            if not x < 0: #Test
-                print("*** Ball detected ***")
-                cv2.rectangle(frame, (0,0), (150,50), (0,0,255), -1) #Test
-                cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
-                
-                #sngl_ball_detected_per_frame[frame_num-1][idx] = scr
-                #Test
-                if scr < 0.99999:
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-                else:
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = scr
-                ###
-
-                #ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f') #Test
-                #bboxes = np.vstack((bboxes, ball_bbox)) #Test
-                #scores = np.append(scores, scr) #Test
-                #names = np.append(names, "ball") #Test
-
-                if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999: #Test
-                    print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (150,50), (0,255,0), -1) #Test
-                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
-
-                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y) #Test
-                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
-
-                    pos_range_x = 75 #Test
-                    pos_range_y = 75 #Test
-                    prev_pos_x = x #Test
-                    prev_pos_y = y #Test
-                elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y: #Test
-                    print("*** Ball drawn ***") #Test
-                    cv2.rectangle(frame, (0,0), (150,50), (0,255,0), -1) #Test
-                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
-                    
-                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
-                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
-
-                    pos_range_x = 75 #Test
-                    pos_range_y = 75 #Test
-                    prev_pos_x = x #Test
-                    prev_pos_y = y #Test
-                else:
-                    pos_range_x += 75 #Test
-                    pos_range_y += 75 #Test
-            else: #Test
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 0 #Test
-                pos_range_x += 75 #Test
-                pos_range_y += 75 #Test
-            ###
-
             # encode yolo detections and feed to tracker
             features = encoder(frame, bboxes)
             detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
+
+            # run non-maxima supression
+            boxs = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            classes = np.array([d.class_name for d in detections])
+            indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
+            detections = [detections[i] for i in indices]
+
+            # Call the tracker
+            tracker.predict()
+            tracker.update(detections)
 
             #initialize color map
             ### Vincent
             #cmap = plt.get_cmap('tab20b')
             #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
-			
+
 			# Background Substraction and HSV Conversion
-            #foreGroundMask = backSub.apply(frame) (create backSub = cv2.createBackgroundSubstractorKNN())
-            #frame_backSub = cv2.bitwise_and(frame, frame, mask = backSub)
+            foreGroundMask = backSub.apply(frame)
+            frame_backSub = cv2.bitwise_and(frame, frame, mask = foreGroundMask)
+            save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg" #For Testing
+            cv2.imwrite(save_path, frame_backSub) #For Testing
             #frame_to_mask = np.asarray(frame_backSub)
-            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+            #frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV)
 
             # Colors
             # Range of H values :
@@ -459,16 +392,87 @@ def main(_argv):
             frame_masked_away = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away)
             ###
 
-            # run non-maxima supression
-            boxs = np.array([d.tlwh for d in detections])
-            scores = np.array([d.confidence for d in detections])
-            classes = np.array([d.class_name for d in detections])
-            indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
-            detections = [detections[i] for i in indices]
+            ### Vincent
+            cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
+            cm = cmap[0,:,:,0]
 
-            # Call the tracker
-            tracker.predict()
-            tracker.update(detections)
+            pos = np.unravel_index(np.argmax(cm, axis=None), cm.shape)
+            y,x = pos
+
+            scr = cm[y,x]
+            print(scr) #Test
+
+            cv2.rectangle(frame, (0,0), (150,50), (255,0,0), -1) #Test
+            cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+            x = -1 if scr < 0.999 else x #Test (change 0.99995 to 0.999)
+
+            ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
+            y,x = math.floor(ky * y), math.floor(kx * x)
+
+            if not x < 0:
+                curr_ball_loc = Point(x, y+12) #Test (change 16 to 12)
+                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
+                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
+                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
+                invalid_ball_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
+                x = -1 if invalid_ball_pos else x
+
+            #if x < 0:
+            #    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+            #else:
+            if not x < 0: #Test
+                print("*** Ball detected ***")
+                cv2.rectangle(frame, (0,0), (150,75), (0,0,255), -1) #Test
+                cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+                #sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                #Test
+                if scr < 0.99999:
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+                else:
+                    sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                ###
+
+                #ball_bbox = np.array([x-16, y-16, 32, 32], dtype='f') #Test
+                #bboxes = np.vstack((bboxes, ball_bbox)) #Test
+                #scores = np.append(scores, scr) #Test
+                #names = np.append(names, "ball") #Test
+
+                if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999: #Test
+                    print("*** Ball drawn ***") #Test
+                    cv2.rectangle(frame, (0,0), (150,75), (0,255,0), -1) #Test
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y) #Test
+                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
+
+                    pos_range_x = 75 #Test
+                    pos_range_y = 75 #Test
+                    prev_pos_x = x #Test
+                    prev_pos_y = y #Test
+                elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y: #Test
+                    print("*** Ball drawn ***") #Test
+                    cv2.rectangle(frame, (0,0), (150,75), (0,255,0), -1) #Test
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #Test
+
+                    cv2.circle(frame, (x, y), 12, (255,255,0), 2) #Test (change 16 to 12 and 5 to 2) #Test
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                    points_info.append((0, x_img, y_img, (255,255,0), idx)) #Test
+
+                    pos_range_x = 75 #Test
+                    pos_range_y = 75 #Test
+                    prev_pos_x = x #Test
+                    prev_pos_y = y #Test
+                else:
+                    pos_range_x += 75 #Test
+                    pos_range_y += 75 #Test
+            else: #Test
+                sngl_ball_detected_per_frame[frame_num-1][idx] = 0 #Test
+                pos_range_x += 75 #Test
+                pos_range_y += 75 #Test
+            ###
 
             # update tracks
             for track in tracker.tracks:
@@ -551,7 +555,7 @@ def main(_argv):
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}, Video idx: {}".format(pi[0], pi[1], pi[2], pi[3], pi[4])) #Test
-                if idx != 1:
+                if idx != 1 or pi[0] == 0:
                     curr_point = Point(pi[1], pi[2])
                     if not curr_point.within(mid_side_map_poly):
                         tot_rec_points_per_frame[frame_num-1].append(pi)
@@ -589,7 +593,7 @@ def main(_argv):
 
                 if not first_ball_detection: #Test
                     first_ball_detection = True #Test
-                
+
             #if count > 1:
             #    idx_next_displayed_frame = 1
             #else:
