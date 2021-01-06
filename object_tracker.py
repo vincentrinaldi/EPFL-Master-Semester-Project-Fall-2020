@@ -182,14 +182,14 @@ def main(_argv):
     # initialize variable to store index of video of next frame to display with mid angle as priority (TODO:Iteration)
     idx_next_displayed_frame = 1
 
-    # initialize variable storing index of video of previous displayed frame
-    idx_next_temp_prev = None
+    # store for each frame of each video the nearest bbox from the ball if the latter has been detected
+    nearest_bbox_from_ball = [[None for i in range(3)] for j in range(final_vid_len)]
 
-    # initialize variable counting the number of consecutive frames of same video with true ball confidence score recorded (TODO:Flag)
-    valid_frame_detection_in_a_row = 0
+    # store the recorded position of the ball on video
+    recorded_ball_positions = [[None for i in range(3)] for j in range(final_vid_len)]
 
-    # initialize boolean that will be set to True when the ball will be considered as being detected for the very first time
-    first_ball_detection = False
+    # store the number of times a frame has been designed to be the best one for each video
+    count_best_frame_ball_detection = [[0 for i in range(3)] for j in range(int((final_vid_len - 1)/max_fps) + 1)]
 
     # store ball detection scores higher than true ball threshold (TODO: Iteration)
     sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(final_vid_len)]
@@ -204,8 +204,8 @@ def main(_argv):
         backSub = cv2.createBackgroundSubtractorKNN()
 
         # initialize variables for validation of ball detection
-        pos_range_x = 75
-        pos_range_y = 75
+        pos_range_x = 100
+        pos_range_y = 100
         prev_pos_x = None
         prev_pos_y = None
 
@@ -245,8 +245,9 @@ def main(_argv):
             if frame_size[0] != max_height or frame_size[1] != max_width:
                 frame = cv2.resize(frame, (max_width, max_height))
 
-            # initialize the list of recorded detections for the current frame
+            # initialize the list of recorded detections and bbox coordinates for the current frame
             points_info = []
+            bboxs_info = []
 
             """
             ####################################################################
@@ -355,15 +356,12 @@ def main(_argv):
             foreGroundMask = backSub.apply(frame)
             frame_backSub = cv2.bitwise_and(frame, frame, mask = foreGroundMask)
 
-            # save masked frame with background subtraction
-            #save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
-            #cv2.imwrite(save_path, frame_backSub)
-
             # switch masked frame from RGB to BGR (or HSV) mode
-            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2BGR)
+            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) #TOREMOVE
+            #frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2BGR) #Test
+            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV) #Test
 
-            """
+            #"""
             # Colors
             # Range of H values :
             #red = 165 to 179 & 0 to 14
@@ -382,42 +380,80 @@ def main(_argv):
             #black = 0 to 255 // 0 to 124
 
             # red mask range (HSV)
-            ref_low_1 = (0, 25, 125)
-            ref_high_1 = (14, 255, 255)
-            ref_low_2 = (165, 25, 125)
+            #ref_low_1 = (0, 25, 125)
+            #ref_low_1 = (0, 76, 76)
+            ref_low_1 = (0, 100, 100)
+            #ref_high_1 = (14, 255, 255)
+            ref_high_1 = (9, 255, 255)
+            #ref_low_2 = (165, 25, 125)
+            #ref_low_2 = (165, 76, 76)
+            ref_low_2 = (170, 100, 100)
             ref_high_2 = (179, 255, 255)
 
             # blue mask range (HSV)
-            home_low = (105, 25, 125)
-            home_high = (134, 255, 255)
+            #home_low = (105, 25, 125)
+            #home_low = (105, 76, 76)
+            home_low = (110, 75, 75)
+            #home_high = (134, 255, 255)
+            home_high = (130, 255, 255)
 
             # white mask range (HSV)
-            away_low = (0,0,125)
-            away_high = (255,24,255)
+            #away_low = (0,0,125)
+            #away_low = (0,0,180)
+            away_low = (0,0,180)
+            #away_high = (255,24,255)
+            #away_high = (179,75,255)
+            away_high = (179,75,255)
 
             mask_ref_1 = cv2.inRange(frame_to_mask, ref_low_1, ref_high_1)
             mask_ref_2 = cv2.inRange(frame_to_mask, ref_low_2, ref_high_2)
             mask_ref = cv2.bitwise_or(mask_ref_1, mask_ref_2)
             mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
             mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+
+            # home goalie mask range (HSV) #Test
+            home_goalie_low = (25,100,100)
+            home_goalie_high = (35,255,255)
+            mask_home_goalie = cv2.inRange(frame_to_mask, home_goalie_low, home_goalie_high)
+            frame_masked_home_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home_goalie)
+
+            # away goalie mask range (HSV) #Test
+            away_goalie_low = (40,20,120)
+            away_goalie_high = (90,80,230)
+            mask_away_goalie = cv2.inRange(frame_to_mask, away_goalie_low, away_goalie_high)
+            frame_masked_away_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away_goalie)
+
             """
 
             # red mask range (BGR)
-            ref_low = (17, 15, 75)
-            ref_high = (50, 56, 200)
+            #ref_low = (17, 15, 75)
+            #ref_high = (50, 56, 200)
+            #ref_low = (16, 16, 96)
+            #ref_high = (31, 31, 255)
+            ref_low = (16, 16, 72)
+            ref_high = (47, 55, 200)
 
             # blue mask range (BGR)
-            home_low = (43, 31, 4)
-            home_high = (250, 88, 50)
+            #home_low = (43, 31, 4)
+            #home_high = (250, 88, 50)
+            #home_low = (48, 32, 32)
+            #home_high = (255, 47, 47)
+            home_low = (40, 32, 8)
+            home_high = (247, 87, 47)
 
             # white mask range (BGR)
-            away_low = (187,169,112)
+            #away_low = (187,169,112)
+            #away_high = (255,255,255)
+            #away_low = (224,224,224)
+            #away_high = (255,255,255)
+            away_low = (184,168,112)
             away_high = (255,255,255)
 
             # create the different masks for referees, home and away teams jersey
             mask_ref = cv2.inRange(frame_to_mask, ref_low, ref_high)
             mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
             mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+            """
 
             # apply each mask on the same current frame to create three resulting masked frames
             frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
@@ -430,8 +466,11 @@ def main(_argv):
             ####################################################################
             """
 
+            ball_position = None
+
             # predict ball detection confidence score on every pixel of the frame
-            cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
+            #cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0) #TOREMOVE
+            cmap = deep_ball_model.predict(np.array([cv2.resize(frame_backSub.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
             cm = cmap[0,:,:,0]
 
             # retrieve pixel position having highest ball detection confidence score
@@ -440,76 +479,92 @@ def main(_argv):
 
             # retrieve highest ball detection confidence score value
             scr = cm[y,x]
-            print(scr) #TOREMOVE
-            cv2.rectangle(frame, (0,0), (250,50), (255,0,0), -1) #TOREMOVE
-            cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #TOREMOVE
+            #print(scr) #TOREMOVE
+            cv2.rectangle(frame, (0,0), (700,50), (255,0,0), -1)
+            cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
             # check if highest ball detection confidence score is less than minimum acceptable threshold
-            x = -1 if scr < 0.999 else x
+            x = -1 if scr < 0.999999 else x
 
             # compute coordinates of highest ball detection confidence score pixel on full size frame
             ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
             y,x = math.floor(ky * y), math.floor(kx * x)
 
-            # check if position of highest ball detection confidence score pixel is not on the field
-            if not x < 0:
-                curr_ball_loc = Point(x, y+12)
-                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_ball_loc.within(blue_side_field_poly)
-                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_ball_loc.within(mid_side_field_poly)
-                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_ball_loc.within(white_side_field_poly)
-                invalid_ball_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
-                x = -1 if invalid_ball_pos else x
-
             # if position is valid we check if this is a true ball detection or if new position of the ball is consistent
             if not x < 0:
                 print("*** Ball detected ***")
-                cv2.rectangle(frame, (0,0), (250,50), (0,0,255), -1) #TOREMOVE
-                cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #TOREMOVE
+                cv2.rectangle(frame, (0,0), (700,50), (0,0,255), -1)
+                cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (255,255,255), 2)
 
-                # if ball detection confidence score is higher than true ball detection threshold we consider that it is a true ball detection and we save the confidence score value in the array used for camera angle switching
-                if scr < 0.99999:
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-                else:
-                    sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                sngl_ball_detected_per_frame[frame_num-1][idx] = scr
 
                 # check if current ball detection is consistent
-                # if it is the first time we detect a ball or if it is a true ball detection then we consider that it is a valid ball detection and reset the range in addition to updating the previous valid ball detection position
-                if (prev_pos_x == None and prev_pos_y == None) or not scr < 0.99999:
+                # if this is a valid ball detection we reset the range in addition to updating the previous valid ball detection position
+                if (prev_pos_x == None and prev_pos_y == None):
                     print("*** Ball drawn ***")
-                    cv2.rectangle(frame, (0,0), (250,50), (0,255,0), -1) #TOREMOVE
-                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #TOREMOVE
+                    cv2.rectangle(frame, (0,0), (700,50), (0,255,0), -1)
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2)
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                    cv2.circle(frame_backSub, (x, y), 12, (255,255,0), 2)
+                    # save masked frame with background subtraction
+                    save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
+                    cv2.imwrite(save_path, frame_backSub)
+
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+12)
                     points_info.append((0, x_img, y_img, (255,255,0), idx))
 
-                    pos_range_x = 75
-                    pos_range_y = 75
+                    ball_position = (x, y)
+
+                    pos_range_x = 100
+                    pos_range_y = 100
                     prev_pos_x = x
                     prev_pos_y = y
                 # if the ball detection is in a certain range from the previous valid ball detection then we consider that it is a valid ball detection and reset the range in addition to updating the previous valid ball detection position
                 elif x > prev_pos_x - pos_range_x and x < prev_pos_x + pos_range_x and y > prev_pos_y - pos_range_y and y < prev_pos_y + pos_range_y:
                     print("*** Ball drawn ***")
-                    cv2.rectangle(frame, (0,0), (250,50), (0,255,0), -1) #TOREMOVE
-                    cv2.putText(frame, str(scr) + "-" + str(frame_num),(0, 30),0, 0.75, (0,0,0),2) #TOREMOVE
+                    cv2.rectangle(frame, (0,0), (700,50), (0,255,0), -1)
+                    cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
                     cv2.circle(frame, (x, y), 12, (255,255,0), 2)
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y)
+                    cv2.circle(frame_backSub, (x, y), 12, (255,255,0), 2)
+                    # save masked frame with background subtraction
+                    save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
+                    cv2.imwrite(save_path, frame_backSub)
+
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+12)
                     points_info.append((0, x_img, y_img, (255,255,0), idx))
 
-                    pos_range_x = 75
-                    pos_range_y = 75
+                    ball_position = (x, y)
+
+                    pos_range_x = 100
+                    pos_range_y = 100
                     prev_pos_x = x
                     prev_pos_y = y
                 # otherwise it's not a consistent next position and we increase the range where the ball can be from the last valid detection position
                 else:
-                    pos_range_x += 75
-                    pos_range_y += 75
+                    pos_range_x += 100
+                    pos_range_y += 100
             # otherwise we increase the range where the ball can be from the last valid detection position
             else:
                 sngl_ball_detected_per_frame[frame_num-1][idx] = 0
-                pos_range_x += 75
-                pos_range_y += 75
+                pos_range_x += 100
+                pos_range_y += 100
+
+            # if we are processing the last video we fill the array of ordered video index from which to display the frame on the final video
+            if idx == 2:
+                max_rec = -1
+                idx_max = []
+                for i in range(3):
+                    temp = sngl_ball_detected_per_frame[frame_num-1][i]
+                    if temp > max_rec:
+                        max_rec = temp
+                        idx_max = [i]
+                    elif temp == max_rec:
+                        idx_max.append(i)
+                if max_rec != 0:
+                    for i in idx_max:
+                        count_best_frame_ball_detection[int((frame_num - 1)/max_fps)][i] += 1
 
             """
             ####################################################################
@@ -551,8 +606,16 @@ def main(_argv):
                 home_ratio = black_pixels_ratio(crop_image_home)
                 away_ratio = black_pixels_ratio(crop_image_away)
 
+                #Test
+                crop_image_home_goalie = frame_masked_home_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+                home_goalie_ratio = black_pixels_ratio(crop_image_home_goalie)
+                crop_image_away_goalie = frame_masked_away_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+                away_goalie_ratio = black_pixels_ratio(crop_image_away_goalie)
+
                 # create list gathering every ratio result
-                ratio_list = [ref_ratio, home_ratio, away_ratio]
+                #ratio_list = [ref_ratio, home_ratio, away_ratio]
+                ratio_list = [ref_ratio, home_ratio, away_ratio, home_goalie_ratio, away_goalie_ratio] #Test
+                #print(track.track_id, ratio_list) #Test
 
                 # compute displayed color of current bbox and its text by choosing the lowest ratio of black pixels
                 color_box = None
@@ -560,7 +623,7 @@ def main(_argv):
                 if min(ratio_list) == ref_ratio:
                     color_box = (255,0,0)
                     color_text = (255,255,255)
-                elif min(ratio_list) == home_ratio:
+                elif min(ratio_list) == home_ratio or min(ratio_list) == home_goalie_ratio: #Test
                     color_box = (0,0,255)
                     color_text = (255,255,255)
                 else:
@@ -579,6 +642,9 @@ def main(_argv):
 
                 # add recorded detection to list gathering detections for current frame
                 points_info.append((track.track_id, px_img, py_img, color_box, idx))
+
+                # add bbox coordinates and track id to list that will be used for statistics computation
+                bboxs_info.append((track.track_id, int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]), color_box))
 
                 # if enable info flag then print details about each track
                 if FLAGS.info:
@@ -600,49 +666,54 @@ def main(_argv):
                 else:
                     tot_rec_points_per_frame[frame_num-1].append(pi)
 
+            if ball_position != None:
+                recorded_ball_positions[frame_num-1][idx] = ball_position
+                min_dist = 999999
+                selected_bbox_idx = -1
+                for bi_idx, bi in enumerate(bboxs_info):
+                    if bi[5] != (255,0,0):
+                        center_bbox = Point((bi[1]+bi[3])/2, (bi[2]+bi[4])/2)
+                        ball_point = Point(ball_position[0], ball_position[1])
+                        distance_to_center_bbox = ball_point.distance(center_bbox)
+                        #print(bi) #TOREMOVE
+                        #print(center_bbox) #TOREMOVE
+                        #print(ball_point) #TOREMOVE
+                        #print(bi[0], distance_to_center_bbox) #TOREMOVE
+                        if min_dist > distance_to_center_bbox:
+                            min_dist = distance_to_center_bbox
+                            selected_bbox_idx = bi_idx
+                #print(selected_bbox_idx) #TOREMOVE
+                if selected_bbox_idx != -1:
+                    selected_bbox = bboxs_info[selected_bbox_idx]
+                    nearest_bbox_from_ball[frame_num-1][idx] = (selected_bbox[0], min_dist, selected_bbox[5])
+
             # display time taken to run detections on the current frame in terms of fps
             fps = 1.0 / (time.time() - start_time)
             print("FPS: %.2f" % fps)
 
+    print(count_best_frame_ball_detection) #TOREMOVE
+
+    nb_possession_frames = 0
+    possession_home = 0
+    possession_away = 0
+
+    prev_possession = None
+    currently_passing = False
+    total_passes_home = 0
+    correct_passes_home = 0
+    total_passes_away = 0
+    correct_passes_away = 0
+
+    polygons_list = [blue_side_field_poly, mid_side_field_poly, white_side_field_poly]
+
+    heatmap_values = [[0 for i in range(498)] for j in range(321)]
+
     # start computation of output video
     for i in range(final_vid_len):
 
-        # select next frame to be displayed on final video
-        # check frames for each video at same time step where a true ball detection occurred
-        count = len([j for j in sngl_ball_detected_per_frame[i] if j > 0])
-        # if it occurred on at least one frame we check if we must switch camera angle
-        if count > 0:
-            # store the video index of the frame with highest ball detection confidence score
-            idx_next_temp = sngl_ball_detected_per_frame[i].index(max(sngl_ball_detected_per_frame[i]))
-            # if a camera angle different than the current displayed one is concerned then we check if we can increment the consecutive frames count for true ball detection
-            if idx_next_temp != idx_next_displayed_frame:
-                # if it is the first frame in the consecutive count then we increment the consecutive frames count
-                if idx_next_temp_prev == None:
-                    idx_next_temp_prev = idx_next_temp
-                    valid_frame_detection_in_a_row += 1
-                # if it is the same frame index than the previous recorded one then we increment the consecutive frames count
-                elif idx_next_temp == idx_next_temp_prev:
-                    valid_frame_detection_in_a_row += 1
-                # otherwise we reset the consecutive frames count for true ball detection
-                else:
-                    idx_next_temp_prev = None
-                    valid_frame_detection_in_a_row = 0
-            # otherwise we reset the consecutive frames count for true ball detection
-            else:
-                idx_next_temp_prev = None
-                valid_frame_detection_in_a_row = 0
-            # if consecutive frames count threshold is reached we switch camera angle (TODO:Flag)
-            if valid_frame_detection_in_a_row == 4:
-                idx_next_temp_prev = None
-                valid_frame_detection_in_a_row = 0
-                idx_next_displayed_frame = idx_next_temp
-                # if we reached consecutive frames count threshold for the first time we will draw the ball on 2D map from now on
-                if not first_ball_detection:
-                    first_ball_detection = True
-        # otherwise we reset the consecutive frames count for true ball detection
-        else:
-            idx_next_temp_prev = None
-            valid_frame_detection_in_a_row = 0
+        next_idx = [j for j, x in enumerate(count_best_frame_ball_detection[int(i/max_fps)]) if x == max(count_best_frame_ball_detection[int(i/max_fps)])]
+        if len(next_idx) == 1:
+            idx_next_displayed_frame = next_idx[0]
 
         # load previously corresponding saved frame
         load_path = "processing/" + str(idx_next_displayed_frame+1) + "/" + str(i+1) + ".jpg"
@@ -666,6 +737,125 @@ def main(_argv):
         cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
         cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
 
+        # update the different statistics
+        # statistics for possession and passing accuracy which needs to ball to be detected for the current frame
+        if nearest_bbox_from_ball[i][idx_next_displayed_frame] != None:
+            # check which player from which team is the closest to the ball
+            color_rectangle = None
+            color_text = None
+            team = None
+            if nearest_bbox_from_ball[i][idx_next_displayed_frame][2] == (0,0,255):
+                color_rectangle = (255,0,0)
+                color_text = (255,255,255)
+                team = "Home"
+            else:
+                color_rectangle = (255,255,255)
+                color_text = (0,0,0)
+                team = "Away"
+
+            # check if the ball is too far from the player meaning we are in a passing phase or if the ball is very close to him meaning it's possession phase
+            phase = None
+            if nearest_bbox_from_ball[i][idx_next_displayed_frame][1] > 70:
+                phase = "Passing"
+                currently_passing = True
+            else:
+                phase = "Possession"
+                # if it was a passing phase at the previous frame we will check if the ball was the closest to an other player in the previous possession phase
+                if currently_passing:
+                    currently_passing = False
+                    if prev_possession != None:
+                        # we can only do that if we are on the same camera angle
+                        if idx_next_displayed_frame == prev_possession[2]:
+                            # if it was a different player before then we update the passing accuracy statistics
+                            if nearest_bbox_from_ball[i][idx_next_displayed_frame][0] != prev_possession[0]:
+                                # if the previous player was from the same team then it's a successful pass
+                                if team == prev_possession[1]:
+                                    if team == "Home":
+                                        total_passes_home += 1
+                                        correct_passes_home += 1
+                                    else:
+                                        total_passes_away += 1
+                                        correct_passes_away += 1
+                                # otherwise the player missed the pass
+                                else:
+                                    if team == "Home":
+                                        total_passes_away += 1
+                                    else:
+                                        total_passes_home += 1
+                        # otherwise we just check the team that had the ball at the previous possession phase
+                        else:
+                            # if the previous player was from the same team then it's a successful pass
+                            if team == prev_possession[1]:
+                                if team == "Home":
+                                    total_passes_home += 1
+                                    correct_passes_home += 1
+                                else:
+                                    total_passes_away += 1
+                                    correct_passes_away += 1
+                            # otherwise the player missed the pass
+                            else:
+                                if team == "Home":
+                                    total_passes_away += 1
+                                else:
+                                    total_passes_home += 1
+
+                # we update the current nearest player as being the previous reference player of the next frame to process
+                prev_possession = (nearest_bbox_from_ball[i][idx_next_displayed_frame][0], team, idx_next_displayed_frame)
+
+                # we update the possession statistics
+                nb_possession_frames += 1
+                if team == "Home":
+                    possession_home += 1
+                else:
+                    possession_away += 1
+
+            # we display the phase information on the screen
+            cv2.rectangle(result, (1220,0), (1920,50), color_rectangle, -1)
+            cv2.putText(result, str(nearest_bbox_from_ball[i][idx_next_displayed_frame][0]) + " - " + phase, (1230, 30), 0, 0.75, color_text, 2)
+        else:
+            cv2.rectangle(result, (1220,0), (1920,50), (0,0,0), -1)
+            cv2.putText(result, "No Valid Ball Detected", (1230, 30), 0, 0.75, (255,255,255), 2)
+
+        # we display the possession statistics information on the screen
+        cv2.rectangle(result, (1220,1038), (1920,1088), (0,0,0), -1)
+        ratio_possession_home = str(possession_home) + "/" + str(nb_possession_frames)
+        ratio_possession_away = str(possession_away) + "/" + str(nb_possession_frames)
+        if nb_possession_frames > 0:
+            cv2.putText(result, str(int((possession_home/nb_possession_frames)*100)) + "%" + " (" + ratio_possession_home + ")" + " - Possession - " + str(int((possession_away/nb_possession_frames)*100)) + "%" + " (" + ratio_possession_away + ")", (1230, 1068), 0, 0.75, (255,255,255), 2)
+        else:
+            cv2.putText(result, str(0) + "%" + " (" + ratio_possession_home + ")" + " - Possession - " + str(0) + "%" + " (" + ratio_possession_away + ")", (1230, 1068), 0, 0.75, (255,255,255), 2)
+
+        # we display the passing accuracy statistics information on the screen
+        cv2.rectangle(result, (0,1038), (700,1088), (255,255,255), -1)
+        pass_accuracy_home = 0
+        pass_accuracy_away = 0
+        if total_passes_home > 0:
+            pass_accuracy_home = int((correct_passes_home/total_passes_home)*100)
+        if total_passes_away > 0:
+            pass_accuracy_away = int((correct_passes_away/total_passes_away)*100)
+        ratio_pass_home = str(correct_passes_home) + "/" + str(total_passes_home)
+        ratio_pass_away = str(correct_passes_away) + "/" + str(total_passes_away)
+        cv2.putText(result, str(pass_accuracy_home) + "%" + " (" + ratio_pass_home + ")" + " - Pass Accuracy - " + str(pass_accuracy_away) + "%" + " (" + ratio_pass_away + ")", (10, 1068), 0, 0.75, (0,0,0), 2)
+
+        # we display the current phase of the play according to ball position
+        if recorded_ball_positions[i][idx_next_displayed_frame] != None:
+            ball_pos = recorded_ball_positions[i][idx_next_displayed_frame]
+            ball_pt = Point(ball_pos[0], ball_pos[1])
+            play_phase = None
+            if not ball_pt.within(polygons_list[idx_next_displayed_frame]):
+                play_phase = "Out of Bounds"
+            else:
+                play_phase = "On Field"
+            if play_phase == "Out of Bounds":
+                cv2.rectangle(result, (810,0), (1110,50), (0,0,255), -1)
+                cv2.putText(result, play_phase, (820, 30), 0, 0.75, (0,0,0), 2)
+            else:
+                cv2.rectangle(result, (810,0), (1110,50), (0,255,0), -1)
+                cv2.putText(result, play_phase, (820, 30), 0, 0.75, (0,0,0), 2)
+        else:
+            cv2.rectangle(result, (810,0), (1110,50), (0,0,0), -1)
+            cv2.putText(result, "No Ball Detected", (820, 30), 0, 0.75, (255,255,255), 2)
+
         # load bird’s-eye view image and draw all landmark areas on 2D map
         bird_eye = cv2.imread("data/img/football_field.jpg")
         cv2.circle(bird_eye, (0, 180), 2, (0,255,255),cv2.FILLED)
@@ -678,12 +868,13 @@ def main(_argv):
             cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 1, (255,0,255),cv2.FILLED)
         # draw all valid detections recorded on every frame at current time step of each video on 2D map
         for pi in tot_rec_points_per_frame[i]:
-            if first_ball_detection or pi[0] != 0:
-                if pi[0] == 0:
-                    if pi[4] == idx_next_displayed_frame:
-                        cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
-                else:
+            if pi[0] == 0:
+                if pi[4] == idx_next_displayed_frame:
                     cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+            else:
+                cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
+                if pi[3][2] == 255 and pi[3][1] == 0 and pi[3][0] == 0: #TODO:Flag
+                    heatmap_values[pi[2]][pi[1]] += 1 #Test
 
         # shrink bird's-eye view image (TODO:Flag)
         scale_percent = 60
@@ -704,6 +895,42 @@ def main(_argv):
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+    heatmap_background = cv2.imread("data/img/football_field.jpg")
+    for i in range(heatmap_background.shape[0]):
+        for j in range(heatmap_background.shape[1]):
+            heatmap_values[i][j] = int((float(heatmap_values[i][j]) / float(final_vid_len)) * 255)
+    heatmap_values = np.array(heatmap_values)
+    heatmap_values = heatmap_values.astype(np.uint8)
+    heatmap_values = cv2.applyColorMap(heatmap_values, cv2.COLORMAP_JET)
+    # write heatmap to img folder
+    #save_path = "data/img/heatmap_player_" + str(1) + ".jpg"
+    #cv2.imwrite(save_path, heatmap_values)
+
+    heatmap_values = cv2.cvtColor(heatmap_values, cv2.COLOR_BGR2BGRA)
+    for i in range(heatmap_values.shape[0]):
+        for j in range(heatmap_values.shape[1]):
+            if heatmap_values[i][j][0] == 128 and heatmap_values[i][j][1] == 0 and heatmap_values[i][j][2] == 0:
+                heatmap_values[i][j][3] = 0
+
+    #save_path = "data/img/heatmap_player_" + str(1) + "_transparency.png"
+    #cv2.imwrite(save_path, heatmap_values)
+
+    heatmap_background = cv2.cvtColor(heatmap_background, cv2.COLOR_BGR2BGRA)
+
+    # normalize alpha channels from 0-255 to 0-1
+    alpha_background = heatmap_background[:,:,3] / 255.0
+    alpha_foreground = heatmap_values[:,:,3] / 255.0
+
+    # set adjusted colors
+    for color in range(0, 3):
+        heatmap_background[:,:,color] = alpha_foreground * heatmap_values[:,:,color] + alpha_background * heatmap_background[:,:,color] * (1 - alpha_foreground)
+
+    # set adjusted alpha and denormalize back to 0-255
+    heatmap_background[:,:,3] = (1 - (1 - alpha_foreground) * (1 - alpha_background)) * 255
+
+    save_path = "data/img/heatmap_player_blue_final.png"
+    cv2.imwrite(save_path, heatmap_background)
 
     cv2.destroyAllWindows()
 
