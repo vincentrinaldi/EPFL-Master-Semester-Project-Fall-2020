@@ -42,12 +42,13 @@ from shapely.geometry import Point, Polygon
 
 # definition of the different flags
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
-flags.DEFINE_string('weights', './checkpoints/yolov4-416',
-                    'path to weights file')
+flags.DEFINE_string('weights', './checkpoints/yolov4-416', 'path to weights file')
 flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
+flags.DEFINE_string('video', './data/video/football_blue_side_1.avi+./data/video/football_mid_side_1.avi+./data/video/football_white_side_1.avi',
+                    'path to input video or set to 0 for webcam | \
+                    REMINDER : each video path has to be separated from others by a +')
 flags.DEFINE_string('output', None, 'path to output video')
 flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
 flags.DEFINE_float('iou', 0.45, 'iou threshold')
@@ -56,6 +57,16 @@ flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video')
+flags.DEFINE_string('landmark_coords', '278,98-0,460-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,460-1642,98',
+                    'landmark 2D coordinates on frames for each video in the form x1,y1-x2,y2-...-x5,y5 or x1,y1-x2,y2-...-x4,y4 | \
+                    1st REMINDER : 5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth_point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left, bottom-left, bottom-right, top-right}) | \
+                    2nd REMINDER : each list of points for a given video has to be separated from others by a + | \
+                    3rd REMINDER : first list of coordinates on frames must be related to first video specified in VIDEO flag, second list to second video specified in VIDEO flag, ect...')
+flags.DEFINE_string('mini_landmark_coords', '0,0-22,320-142,320-190,0+142,0-190,320-307,320-355,0+307,0-355,320-475,320-497,0',
+                    'landmark 2D coordinates on mini-map for each video in the form x1,y1-x2,y2-...-x4,y4 | \
+                    1st REMINDER : 4 (x,y) points are expected for either filmed part of the field (in the order {top-left -> bottom-left -> bottom-right -> top-right} | \
+                    2nd REMINDER : each list of points for a given video has to be separated from others by a + | \
+                    3rd REMINDER : first list of coordinates on mini-map must be related to first video specified in VIDEO flag, second list to second video specified in VIDEO flag, ect...')
 
 def main(_argv):
 
@@ -102,31 +113,27 @@ def main(_argv):
         pass
     customObj = {'deepball_loss_function': deepball_loss_function, 'deepball_precision': deepball_precision}
     deep_ball_model = keras.models.load_model('./deepballlocal.h5', custom_objects=customObj)
-    # uncomment below line to display the architecture of the deepball neural network
-    #deep_ball_model.summary()
 
-    # begin video capture (TODO:Iteration)
+    # begin video capture
+    # create list of videos to process
     vid_args = video_path.split("+")
-    try:
-        vid_blue = cv2.VideoCapture(int(vid_args[0]))
-    except:
-        vid_blue = cv2.VideoCapture(vid_args[0])
-    try:
-        vid_mid = cv2.VideoCapture(int(vid_args[1]))
-    except:
-        vid_mid = cv2.VideoCapture(vid_args[1])
-    try:
-        vid_white = cv2.VideoCapture(int(vid_args[2]))
-    except:
-        vid_white = cv2.VideoCapture(vid_args[2])
+    vid_list = []
+    for i in range(len(vid_args)):
+        try:
+            curr_vid = cv2.VideoCapture(int(vid_args[i]))
+        except:
+            curr_vid = cv2.VideoCapture(vid_args[i])
+        vid_list.append(curr_vid)
 
-    # definition of width height fps and frame length of output video (TODO:Iteration)
-    max_width = max([int(vid_blue.get(cv2.CAP_PROP_FRAME_WIDTH)), int(vid_mid.get(cv2.CAP_PROP_FRAME_WIDTH)), int(vid_white.get(cv2.CAP_PROP_FRAME_WIDTH))])
-    max_height = max([int(vid_blue.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(vid_mid.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(vid_white.get(cv2.CAP_PROP_FRAME_HEIGHT))])
-    max_fps = max([int(vid_blue.get(cv2.CAP_PROP_FPS)), int(vid_mid.get(cv2.CAP_PROP_FPS)), int(vid_white.get(cv2.CAP_PROP_FPS))])
-    final_vid_len = min([int(vid_blue.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_mid.get(cv2.CAP_PROP_FRAME_COUNT)), int(vid_white.get(cv2.CAP_PROP_FRAME_COUNT))])
+    # definition of width height fps and frame length of output video
+    max_width = max(int(curr_vid.get(cv2.CAP_PROP_FRAME_WIDTH)) for curr_vid in vid_list)
+    max_height = max(int(curr_vid.get(cv2.CAP_PROP_FRAME_HEIGHT)) for curr_vid in vid_list)
+    max_fps = max(int(curr_vid.get(cv2.CAP_PROP_FPS)) for curr_vid in vid_list)
+    final_vid_len = min(int(curr_vid.get(cv2.CAP_PROP_FRAME_COUNT)) for curr_vid in vid_list)
     if FLAGS.vid_len != -1:
         final_vid_len = FLAGS.vid_len
+
+    print(max_width, max_height, max_fps, final_vid_len)
 
     out = None
     # get video ready to save locally if flag is set
@@ -138,61 +145,128 @@ def main(_argv):
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
-    # definition of 4-points landmark on video (TODO:Flag to define video landmark & Iteration)
-    # video size is 1920x1080 for blue and mid side & 1920x1088 for white side
-    pts_video_blue = np.float32([[278,98],[1920,98],[0,1038],[1920,1038]]) #Blue side 1
-    pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
-    pts_video_white = np.float32([[0,98],[1642,98],[0,1038],[1920,1038]]) #White side 1
+    # definition of 4-points landmark on frames for each video
+    coords_args = FLAGS.landmark_coords.split("+")
+    coords_lists = [[] for i in range(len(coords_args))]
+    if len(coords_args) == len(vid_args):
+        for i, coords in enumerate(coords_args):
+            curr_list = coords.split("-")
+            if ((i == 0 or i == len(coords_args)-1) and len(curr_list) == 5) or (i != 0 and i != len(coords_args)-1 and len(curr_list) == 4):
+                for point in curr_list:
+                    curr_point = point.split(",")
+                    coords_lists[i].append([int(curr_point[0]), int(curr_point[1])])
+            else:
+                raise ValueError("5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth_point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left -> bottom-left -> bottom-right -> top-right})")
+    else:
+        raise ValueError("The number of lists of coordinates on frames has to match the number of videos used")
+    for i in range(len(coords_lists)):
+        coords_lists[i] = np.float32(coords_lists[i])
 
-    # create polygons delimiting each side of the field on video (TODO:Flag to set side and fifth point & Iteration)
-    blue_coords_field_poly = [(pts_video_blue[0][0], pts_video_blue[0][1]), (0, 460), (pts_video_blue[2][0], pts_video_blue[2][1]), (pts_video_blue[3][0], pts_video_blue[3][1]), (pts_video_blue[1][0], pts_video_blue[1][1])]
-    blue_side_field_poly = Polygon(blue_coords_field_poly)
-    mid_coords_field_poly = [(pts_video_mid[0][0], pts_video_mid[0][1]), (pts_video_mid[2][0], pts_video_mid[2][1]), (pts_video_mid[3][0], pts_video_mid[3][1]), (pts_video_mid[1][0], pts_video_mid[1][1])]
-    mid_side_field_poly = Polygon(mid_coords_field_poly)
-    white_coords_field_poly = [(pts_video_white[0][0], pts_video_white[0][1]), (pts_video_white[2][0], pts_video_white[2][1]), (pts_video_white[3][0], pts_video_white[3][1]), (1920, 460), (pts_video_white[1][0], pts_video_white[1][1])]
-    white_side_field_poly = Polygon(white_coords_field_poly)
+    # create polygons delimiting each side of the field on frames
+    polygons_list = []
+    for i in range(len(coords_lists)):
+        if i == 0:
+            top_left, fifth_point, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
+            polygons_list.append(Polygon([top_left, fifth_point, bottom_left, bottom_right, top_right]))
+        elif i == len(coords_lists)-1:
+            top_left, bottom_left, bottom_right, fifth_point, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
+            polygons_list.append(Polygon([top_left, bottom_left, bottom_right, fifth_point, top_right]))
+        else:
+            top_left, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1])
+            polygons_list.append(Polygon([top_left, bottom_left, bottom_right, top_right]))
 
-    # definition of 4-points landmark on image (TODO:Flag to define image landmark & Iteration)
-    # img size is 498x321
-    pts_map_blue = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
-    pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
-    pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
+    # definition of 4-points landmarks on mini-map
+    mini_coords_args = FLAGS.mini_landmark_coords.split("+")
+    mini_coords_lists = [[] for i in range(len(mini_coords_args))]
+    if len(mini_coords_args) == len(vid_args):
+        for i, mini_coords in enumerate(mini_coords_args):
+            curr_mini_list = mini_coords.split("-")
+            if len(curr_mini_list) == 4:
+                for mini_point in curr_mini_list:
+                    curr_mini_point = mini_point.split(",")
+                    mini_coords_lists[i].append([int(curr_mini_point[0]), int(curr_mini_point[1])])
+            else:
+                raise ValueError("4 (x,y) points are expected for either filmed part of the field (in the order {top-left -> bottom-left -> bottom-right -> top-right}")
+    else:
+        raise ValueError("The number of lists of coordinates on mini-map has to match the number of videos used")
+    for i in range(len(mini_coords_lists)):
+        mini_coords_lists[i] = np.float32(mini_coords_lists[i])
 
-    # create polygon for mid side camera angle on 2D map (TODO:Iteration)
-    mid_coords_map_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
-    mid_side_map_poly = Polygon(mid_coords_map_poly)
+    # create polygon for mid side camera angle on mini-map to remove potential player duplications when filmed by two different cameras
+    # WARNING : We only perform this operation when we have three camera angles (one filming the middle of the field and the two others filming each end of the field)
+    mini_map_poly = None
+    if len(vid_list) == 3:
+        top_left, bottom_left, bottom_right, top_right = (mini_coords_lists[1][0][0], mini_coords_lists[1][0][1]), (mini_coords_lists[1][1][0], mini_coords_lists[1][1][1]), (mini_coords_lists[1][2][0], mini_coords_lists[1][2][1]), (mini_coords_lists[1][3][0], mini_coords_lists[1][3][1])
+        mini_map_poly = Polygon([top_left, bottom_left, bottom_right, top_right])
 
-    # compute each perspective transformation matrix for bird’s-eye view with video and image 4-points landmark areas (TODO:Iteration)
-    matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
-    matrix_mid = cv2.getPerspectiveTransform(pts_video_mid, pts_map_mid)
-    matrix_white = cv2.getPerspectiveTransform(pts_video_white, pts_map_white)
+    # create list of computed perspective transformation matrices for bird’s-eye view using frames and mini-map 4-points landmarks
+    matrix_list = []
+    for i in range(len(vid_list)):
+        pts_video = None
+        if i == 0:
+            pts_video = np.float32([coords_lists[i][0], coords_lists[i][2], coords_lists[i][3], coords_lists[i][4]])
+        elif i == len(vid_list)-1:
+            pts_video = np.float32([coords_lists[i][0], coords_lists[i][1], coords_lists[i][2], coords_lists[i][4]])
+        else:
+            pts_video = coords_lists[i]
+        pts_map = mini_coords_lists[i]
+        curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
+        matrix_list.append(curr_matrix)
 
-    # create list of videos to process and matrices to use (TODO:Iteration)
-    vid_list = [vid_blue, vid_mid, vid_white]
-    matrix_list = [matrix_blue, matrix_mid, matrix_white]
+    for i in coords_lists:
+        print(i)
+    for i in mini_coords_lists:
+        print(i)
+    for i in polygons_list:
+        print(i)
+    print(mini_map_poly)
+
+    #pts_video_blue = np.float32([[278,98],[1920,98],[0,1038],[1920,1038]]) #Blue side 1
+    #pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
+    #pts_video_white = np.float32([[0,98],[1642,98],[0,1038],[1920,1038]]) #White side 1
+
+    #blue_coords_field_poly = [(pts_video_blue[0][0], pts_video_blue[0][1]), (0, 460), (pts_video_blue[2][0], pts_video_blue[2][1]), (pts_video_blue[3][0], pts_video_blue[3][1]), (pts_video_blue[1][0], pts_video_blue[1][1])]
+    #blue_side_field_poly = Polygon(blue_coords_field_poly)
+    #mid_coords_field_poly = [(pts_video_mid[0][0], pts_video_mid[0][1]), (pts_video_mid[2][0], pts_video_mid[2][1]), (pts_video_mid[3][0], pts_video_mid[3][1]), (pts_video_mid[1][0], pts_video_mid[1][1])]
+    #mid_side_field_poly = Polygon(mid_coords_field_poly)
+    #white_coords_field_poly = [(pts_video_white[0][0], pts_video_white[0][1]), (pts_video_white[2][0], pts_video_white[2][1]), (pts_video_white[3][0], pts_video_white[3][1]), (1920, 460), (pts_video_white[1][0], pts_video_white[1][1])]
+    #white_side_field_poly = Polygon(white_coords_field_poly)
+
+    #pts_map_blue = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
+    #pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
+    #pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
+
+    #mid_coords_map_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
+    #mid_side_map_poly = Polygon(mid_coords_map_poly)
+
+    #matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
+    #matrix_mid = cv2.getPerspectiveTransform(pts_video_mid, pts_map_mid)
+    #matrix_white = cv2.getPerspectiveTransform(pts_video_white, pts_map_white)
+
+    #matrix_list = [matrix_blue, matrix_mid, matrix_white]
 
     # create brand new folder to save frames locally
     shutil.rmtree("processing", ignore_errors = True)
-    os.mkdir("processing")
+    os.makedirs("processing", exist_ok = True)
 
     # associate a subfolder to each video
     for i in range(len(vid_list)):
         os.mkdir("processing/" + str(i+1))
 
-    # initialize variable to store index of video of next frame to display with mid angle as priority (TODO:Iteration)
-    idx_next_displayed_frame = 1
+    # initialize variable to store index of video of next frame to display with middle part angle as priority
+    idx_next_displayed_frame = len(vid_list)/2
 
     # store for each frame of each video the nearest bbox from the ball if the latter has been detected
-    nearest_bbox_from_ball = [[None for i in range(3)] for j in range(final_vid_len)]
+    nearest_bbox_from_ball = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
     # store the recorded position of the ball on video
-    recorded_ball_positions = [[None for i in range(3)] for j in range(final_vid_len)]
+    recorded_ball_positions = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
     # store the number of times a frame has been designed to be the best one for each video
-    count_best_frame_ball_detection = [[0 for i in range(3)] for j in range(int((final_vid_len - 1)/max_fps) + 1)]
+    count_best_frame_ball_detection = [[0 for i in range(len(vid_list))] for j in range(int((final_vid_len - 1)/max_fps) + 1)]
 
     # store ball detection scores higher than true ball threshold (TODO: Iteration)
-    sngl_ball_detected_per_frame = [[None for i in range(3)] for j in range(final_vid_len)]
+    sngl_ball_detected_per_frame = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
     # initialize list of detections to draw as dots on 2D map for each selected frame
     tot_rec_points_per_frame = [[] for i in range(final_vid_len)]
@@ -552,10 +626,10 @@ def main(_argv):
                 pos_range_y += 100
 
             # if we are processing the last video we fill the array of ordered video index from which to display the frame on the final video
-            if idx == 2:
+            if idx == len(vid_list)-1:
                 max_rec = -1
                 idx_max = []
-                for i in range(3):
+                for i in range(len(vid_list)):
                     temp = sngl_ball_detected_per_frame[frame_num-1][i]
                     if temp > max_rec:
                         max_rec = temp
@@ -583,13 +657,13 @@ def main(_argv):
                 curr_bbox_pos = Point(curr_bbox_x, curr_bbox_y)
 
                 # check validity of current bbox position
-                in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_bbox_pos.within(blue_side_field_poly)
-                in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_bbox_pos.within(mid_side_field_poly)
-                in_white_side_but_not_inside_white_poly = idx == 2 and not curr_bbox_pos.within(white_side_field_poly)
-                bool_invalid_bbox_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
+                #in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_bbox_pos.within(blue_side_field_poly)
+                #in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_bbox_pos.within(mid_side_field_poly)
+                #in_white_side_but_not_inside_white_poly = idx == 2 and not curr_bbox_pos.within(white_side_field_poly)
+                #bool_invalid_bbox_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
 
                 # compute boolean gathering validity of dimensions and position of current bbox
-                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or bool_invalid_bbox_pos
+                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or not curr_bbox_pos.within(polygons_list[idx])
 
                 if not track.is_confirmed() or track.time_since_update > 1 or bool_curr_bbox_properties:
                     continue
@@ -661,7 +735,7 @@ def main(_argv):
                 # if it's not the ball and not detected on mid camera angle then if it's inside mid polygon we don't add it to list (TODO:Iteration)
                 if idx != 1 and pi[0] != 0:
                     curr_point = Point(pi[1], pi[2])
-                    if not curr_point.within(mid_side_map_poly):
+                    if not curr_point.within(mini_map_poly):
                         tot_rec_points_per_frame[frame_num-1].append(pi)
                 else:
                     tot_rec_points_per_frame[frame_num-1].append(pi)
@@ -704,7 +778,7 @@ def main(_argv):
     total_passes_away = 0
     correct_passes_away = 0
 
-    polygons_list = [blue_side_field_poly, mid_side_field_poly, white_side_field_poly]
+    #polygons_list = [blue_side_field_poly, mid_side_field_poly, white_side_field_poly]
 
     heatmap_values = [[0 for i in range(498)] for j in range(321)]
 
@@ -722,20 +796,34 @@ def main(_argv):
         # switch loaded frame from RGB to BGR mode
         result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-        # draw the corresponding 4-points landmark area on output video frame (TODO:Iteration)
-        pts_displayed_frame = None
+        # draw the corresponding 4-points landmark area on output video frame
+        #pts_displayed_frame = None
+        #if idx_next_displayed_frame == 0:
+        #    cv2.circle(result, (0, 460), 2, (0,255,255),cv2.FILLED)
+        #    pts_displayed_frame = pts_video_blue
+        #elif idx_next_displayed_frame == 1:
+        #    pts_displayed_frame = pts_video_mid
+        #else:
+        #    cv2.circle(result, (1920, 460), 2, (0,255,255),cv2.FILLED)
+        #    pts_displayed_frame = pts_video_white
+        pts_displayed_frame = coords_lists[idx_next_displayed_frame]
         if idx_next_displayed_frame == 0:
-            cv2.circle(result, (0, 460), 2, (0,255,255),cv2.FILLED)
-            pts_displayed_frame = pts_video_blue
-        elif idx_next_displayed_frame == 1:
-            pts_displayed_frame = pts_video_mid
+            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
+        elif idx_next_displayed_frame == len(vid_list)-1:
+            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
         else:
-            cv2.circle(result, (1920, 460), 2, (0,255,255),cv2.FILLED)
-            pts_displayed_frame = pts_video_white
-        cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-        cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-        cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-        cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
+            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
 
         # update the different statistics
         # statistics for possession and passing accuracy which needs to ball to be detected for the current frame
@@ -860,8 +948,8 @@ def main(_argv):
         bird_eye = cv2.imread("data/img/football_field.jpg")
         cv2.circle(bird_eye, (0, 180), 2, (0,255,255),cv2.FILLED)
         cv2.circle(bird_eye, (497, 180), 2, (0,255,255),cv2.FILLED)
-        pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
-        for pts_map in pts_map_list:
+        #pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
+        for pts_map in mini_coords_lists:
             cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 1, (0,0,255),cv2.FILLED)
             cv2.circle(bird_eye, (pts_map[1][0], pts_map[1][1]), 1, (0,255,0),cv2.FILLED)
             cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 1, (255,0,0),cv2.FILLED)
