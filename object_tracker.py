@@ -133,8 +133,6 @@ def main(_argv):
     if FLAGS.vid_len != -1:
         final_vid_len = FLAGS.vid_len
 
-    print(max_width, max_height, max_fps, final_vid_len)
-
     out = None
     # get video ready to save locally if flag is set
     if FLAGS.output:
@@ -145,81 +143,119 @@ def main(_argv):
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
-    # definition of 4-points landmark on frames for each video
-    coords_args = FLAGS.landmark_coords.split("+")
-    coords_lists = [[] for i in range(len(coords_args))]
-    if len(coords_args) == len(vid_args):
-        for i, coords in enumerate(coords_args):
-            curr_list = coords.split("-")
-            if ((i == 0 or i == len(coords_args)-1) and len(curr_list) == 5) or (i != 0 and i != len(coords_args)-1 and len(curr_list) == 4):
-                for point in curr_list:
-                    curr_point = point.split(",")
-                    coords_lists[i].append([int(curr_point[0]), int(curr_point[1])])
-            else:
-                raise ValueError("5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth_point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left -> bottom-left -> bottom-right -> top-right})")
-    else:
-        raise ValueError("The number of lists of coordinates on frames has to match the number of videos used")
-    for i in range(len(coords_lists)):
-        coords_lists[i] = np.float32(coords_lists[i])
-
-    # create polygons delimiting each side of the field on frames
+    coords_lists = [[] for i in range(len(vid_list))]
     polygons_list = []
-    for i in range(len(coords_lists)):
-        if i == 0:
-            top_left, fifth_point, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
-            polygons_list.append(Polygon([top_left, fifth_point, bottom_left, bottom_right, top_right]))
-        elif i == len(coords_lists)-1:
-            top_left, bottom_left, bottom_right, fifth_point, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
-            polygons_list.append(Polygon([top_left, bottom_left, bottom_right, fifth_point, top_right]))
-        else:
-            top_left, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1])
-            polygons_list.append(Polygon([top_left, bottom_left, bottom_right, top_right]))
-
-    # definition of 4-points landmarks on mini-map
-    mini_coords_args = FLAGS.mini_landmark_coords.split("+")
-    mini_coords_lists = [[] for i in range(len(mini_coords_args))]
-    if len(mini_coords_args) == len(vid_args):
-        for i, mini_coords in enumerate(mini_coords_args):
-            curr_mini_list = mini_coords.split("-")
-            if len(curr_mini_list) == 4:
-                for mini_point in curr_mini_list:
-                    curr_mini_point = mini_point.split(",")
-                    mini_coords_lists[i].append([int(curr_mini_point[0]), int(curr_mini_point[1])])
-            else:
-                raise ValueError("4 (x,y) points are expected for either filmed part of the field (in the order {top-left -> bottom-left -> bottom-right -> top-right}")
-    else:
-        raise ValueError("The number of lists of coordinates on mini-map has to match the number of videos used")
-    for i in range(len(mini_coords_lists)):
-        mini_coords_lists[i] = np.float32(mini_coords_lists[i])
-
-    # create polygon for mid side camera angle on mini-map to remove potential player duplications when filmed by two different cameras
-    # WARNING : We only perform this operation when we have three camera angles (one filming the middle of the field and the two others filming each end of the field)
+    mini_coords_lists = [[] for i in range(len(vid_list))]
     mini_map_poly = None
-    if len(vid_list) == 3:
-        top_left, bottom_left, bottom_right, top_right = (mini_coords_lists[1][0][0], mini_coords_lists[1][0][1]), (mini_coords_lists[1][1][0], mini_coords_lists[1][1][1]), (mini_coords_lists[1][2][0], mini_coords_lists[1][2][1]), (mini_coords_lists[1][3][0], mini_coords_lists[1][3][1])
-        mini_map_poly = Polygon([top_left, bottom_left, bottom_right, top_right])
-
-    # create list of computed perspective transformation matrices for bird’s-eye view using frames and mini-map 4-points landmarks
     matrix_list = []
-    for i in range(len(vid_list)):
-        pts_video = None
-        if i == 0:
-            pts_video = np.float32([coords_lists[i][0], coords_lists[i][2], coords_lists[i][3], coords_lists[i][4]])
-        elif i == len(vid_list)-1:
-            pts_video = np.float32([coords_lists[i][0], coords_lists[i][1], coords_lists[i][2], coords_lists[i][4]])
-        else:
-            pts_video = coords_lists[i]
-        pts_map = mini_coords_lists[i]
-        curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
-        matrix_list.append(curr_matrix)
 
-    for i in coords_lists:
-        print(i)
-    for i in mini_coords_lists:
-        print(i)
-    for i in polygons_list:
-        print(i)
-    print(mini_map_poly)
+    if len(vid_list) == 1:
+
+        # definition of 4-points landmark on frames for each video
+        coords_args = FLAGS.landmark_coords.split("+")
+        if len(coords_args) != len(vid_args):
+            raise ValueError("The number of lists of coordinates on frames has to match the number of videos used")
+        curr_list = FLAGS.landmark_coords.split("-")
+        if len(curr_list) == 4 or len(curr_list) == 6:
+            for point in curr_list:
+                curr_point = point.split(",")
+                coords_lists[0].append([int(curr_point[0]), int(curr_point[1])])
+        else:
+            raise ValueError("6 (x,y) points (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> sixth_point -> top-right}) or 4 (x, y) points (in the order {top-left -> bottom-left -> bottom-right -> top-right}) are expected when processing only one video")
+        coords_lists[0] = np.float32(coords_lists[0])
+
+        # create polygons delimiting each side of the field on frames
+        if len(coords_lists[0]) == 4:
+            top_left, bottom_left, bottom_right, top_right = (coords_lists[0][0][0], coords_lists[0][0][1]), (coords_lists[0][1][0], coords_lists[0][1][1]), (coords_lists[0][2][0], coords_lists[0][2][1]), (coords_lists[0][3][0], coords_lists[0][3][1])
+            polygons_list.append(Polygon([top_left, bottom_left, bottom_right, top_right]))
+        elif len(coords_lists[0]) == 6:
+            top_left, fifth_point, bottom_left, bottom_right, sixth_point, top_right = (coords_lists[0][0][0], coords_lists[0][0][1]), (coords_lists[0][1][0], coords_lists[0][1][1]), (coords_lists[0][2][0], coords_lists[0][2][1]), (coords_lists[0][3][0], coords_lists[0][3][1]), (coords_lists[0][4][0], coords_lists[0][4][1]), (coords_lists[0][5][0], coords_lists[0][5][1])
+            polygons_list.append(Polygon([top_left, fifth_point, bottom_left, bottom_right, sixth_point, top_right]))
+
+        # definition of 4-points landmarks on mini-map
+        mini_coords_args = FLAGS.mini_landmark_coords.split("+")
+        if len(mini_coords_args) != len(vid_args):
+            raise ValueError("The number of lists of coordinates on mini-map has to match the number of videos used")
+        curr_mini_list = FLAGS.mini_landmark_coords.split("-")
+        if len(curr_mini_list) == 4:
+            for mini_point in curr_mini_list:
+                curr_mini_point = mini_point.split(",")
+                mini_coords_lists[0].append([int(curr_mini_point[0]), int(curr_mini_point[1])])
+        else:
+            raise ValueError("4 (x,y) points (in the order {top-left -> bottom-left -> bottom-right -> top-right} are expected when processing only one video")
+        mini_coords_lists[0] = np.float32(mini_coords_lists[0])
+
+        # create list of computed perspective transformation matrices for bird’s-eye view using frames and mini-map 4-points landmarks
+        for i in range(len(vid_list)):
+            pts_video = coords_lists[0]
+            pts_map = mini_coords_lists[0]
+            curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
+            matrix_list.append(curr_matrix)
+
+    elif len(vid_list) > 1:
+
+        # definition of 4-points landmark on frames for each video
+        coords_args = FLAGS.landmark_coords.split("+")
+        if len(coords_args) == len(vid_args):
+            for i, coords in enumerate(coords_args):
+                curr_list = coords.split("-")
+                if ((i == 0 or i == len(coords_args)-1) and len(curr_list) == 5) or (i != 0 and i != len(coords_args)-1 and len(curr_list) == 4):
+                    for point in curr_list:
+                        curr_point = point.split(",")
+                        coords_lists[i].append([int(curr_point[0]), int(curr_point[1])])
+                else:
+                    raise ValueError("5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth_point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left -> bottom-left -> bottom-right -> top-right})")
+        else:
+            raise ValueError("The number of lists of coordinates on frames has to match the number of videos used")
+        for i in range(len(coords_lists)):
+            coords_lists[i] = np.float32(coords_lists[i])
+
+        # create polygons delimiting each side of the field on frames
+        for i in range(len(coords_lists)):
+            if i == 0:
+                top_left, fifth_point, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
+                polygons_list.append(Polygon([top_left, fifth_point, bottom_left, bottom_right, top_right]))
+            elif i == len(coords_lists)-1:
+                top_left, bottom_left, bottom_right, fifth_point, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1]), (coords_lists[i][4][0], coords_lists[i][4][1])
+                polygons_list.append(Polygon([top_left, bottom_left, bottom_right, fifth_point, top_right]))
+            else:
+                top_left, bottom_left, bottom_right, top_right = (coords_lists[i][0][0], coords_lists[i][0][1]), (coords_lists[i][1][0], coords_lists[i][1][1]), (coords_lists[i][2][0], coords_lists[i][2][1]), (coords_lists[i][3][0], coords_lists[i][3][1])
+                polygons_list.append(Polygon([top_left, bottom_left, bottom_right, top_right]))
+
+        # definition of 4-points landmarks on mini-map
+        mini_coords_args = FLAGS.mini_landmark_coords.split("+")
+        if len(mini_coords_args) == len(vid_args):
+            for i, mini_coords in enumerate(mini_coords_args):
+                curr_mini_list = mini_coords.split("-")
+                if len(curr_mini_list) == 4:
+                    for mini_point in curr_mini_list:
+                        curr_mini_point = mini_point.split(",")
+                        mini_coords_lists[i].append([int(curr_mini_point[0]), int(curr_mini_point[1])])
+                else:
+                    raise ValueError("4 (x,y) points are expected for either filmed part of the field (in the order {top-left -> bottom-left -> bottom-right -> top-right}")
+        else:
+            raise ValueError("The number of lists of coordinates on mini-map has to match the number of videos used")
+        for i in range(len(mini_coords_lists)):
+            mini_coords_lists[i] = np.float32(mini_coords_lists[i])
+
+        # create polygon for mid side camera angle on mini-map to remove potential player duplications when filmed by two different cameras
+        # WARNING : We only perform this operation when we have three camera angles (one filming the middle of the field and the two others filming each end of the field)
+        if len(vid_list) == 3:
+            top_left, bottom_left, bottom_right, top_right = (mini_coords_lists[1][0][0], mini_coords_lists[1][0][1]), (mini_coords_lists[1][1][0], mini_coords_lists[1][1][1]), (mini_coords_lists[1][2][0], mini_coords_lists[1][2][1]), (mini_coords_lists[1][3][0], mini_coords_lists[1][3][1])
+            mini_map_poly = Polygon([top_left, bottom_left, bottom_right, top_right])
+
+        # create list of computed perspective transformation matrices for bird’s-eye view using frames and mini-map 4-points landmarks
+        for i in range(len(vid_list)):
+            pts_video = None
+            if i == 0:
+                pts_video = np.float32([coords_lists[i][0], coords_lists[i][2], coords_lists[i][3], coords_lists[i][4]])
+            elif i == len(vid_list)-1:
+                pts_video = np.float32([coords_lists[i][0], coords_lists[i][1], coords_lists[i][2], coords_lists[i][4]])
+            else:
+                pts_video = coords_lists[i]
+            pts_map = mini_coords_lists[i]
+            curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
+            matrix_list.append(curr_matrix)
 
     #pts_video_blue = np.float32([[278,98],[1920,98],[0,1038],[1920,1038]]) #Blue side 1
     #pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
@@ -253,9 +289,6 @@ def main(_argv):
     for i in range(len(vid_list)):
         os.mkdir("processing/" + str(i+1))
 
-    # initialize variable to store index of video of next frame to display with middle part angle as priority
-    idx_next_displayed_frame = len(vid_list)/2
-
     # store for each frame of each video the nearest bbox from the ball if the latter has been detected
     nearest_bbox_from_ball = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
@@ -266,10 +299,10 @@ def main(_argv):
     count_best_frame_ball_detection = [[0 for i in range(len(vid_list))] for j in range(int((final_vid_len - 1)/max_fps) + 1)]
 
     # store ball detection scores higher than true ball threshold (TODO: Iteration)
-    sngl_ball_detected_per_frame = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
+    ball_detection_scores = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
     # initialize list of detections to draw as dots on 2D map for each selected frame
-    tot_rec_points_per_frame = [[] for i in range(final_vid_len)]
+    total_recorded_points = [[] for i in range(final_vid_len)]
 
     # start iteration on each video frame of every video
     for idx, vid in enumerate(vid_list):
@@ -570,7 +603,7 @@ def main(_argv):
                 cv2.rectangle(frame, (0,0), (700,50), (0,0,255), -1)
                 cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (255,255,255), 2)
 
-                sngl_ball_detected_per_frame[frame_num-1][idx] = scr
+                ball_detection_scores[frame_num-1][idx] = scr
 
                 # check if current ball detection is consistent
                 # if this is a valid ball detection we reset the range in addition to updating the previous valid ball detection position
@@ -621,7 +654,7 @@ def main(_argv):
                     pos_range_y += 100
             # otherwise we increase the range where the ball can be from the last valid detection position
             else:
-                sngl_ball_detected_per_frame[frame_num-1][idx] = 0
+                ball_detection_scores[frame_num-1][idx] = 0
                 pos_range_x += 100
                 pos_range_y += 100
 
@@ -630,7 +663,7 @@ def main(_argv):
                 max_rec = -1
                 idx_max = []
                 for i in range(len(vid_list)):
-                    temp = sngl_ball_detected_per_frame[frame_num-1][i]
+                    temp = ball_detection_scores[frame_num-1][i]
                     if temp > max_rec:
                         max_rec = temp
                         idx_max = [i]
@@ -732,13 +765,13 @@ def main(_argv):
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}, Video idx: {}".format(pi[0], pi[1], pi[2], pi[3], pi[4]))
-                # if it's not the ball and not detected on mid camera angle then if it's inside mid polygon we don't add it to list (TODO:Iteration)
-                if idx != 1 and pi[0] != 0:
+                # if it's not the ball and not detected on mid camera angle then if it's inside mid polygon we don't add it to list
+                if idx != 1 and pi[0] != 0 and len(vid_list) == 3:
                     curr_point = Point(pi[1], pi[2])
                     if not curr_point.within(mini_map_poly):
-                        tot_rec_points_per_frame[frame_num-1].append(pi)
+                        total_recorded_points[frame_num-1].append(pi)
                 else:
-                    tot_rec_points_per_frame[frame_num-1].append(pi)
+                    total_recorded_points[frame_num-1].append(pi)
 
             if ball_position != None:
                 recorded_ball_positions[frame_num-1][idx] = ball_position
@@ -765,7 +798,10 @@ def main(_argv):
             fps = 1.0 / (time.time() - start_time)
             print("FPS: %.2f" % fps)
 
-    print(count_best_frame_ball_detection) #TOREMOVE
+    #print(count_best_frame_ball_detection) #TOREMOVE
+
+    # initialize variable to store index of video of next frame to display with middle part angle as priority
+    idx_next_displayed_frame = len(vid_list)/2
 
     nb_possession_frames = 0
     possession_home = 0
@@ -807,23 +843,37 @@ def main(_argv):
         #    cv2.circle(result, (1920, 460), 2, (0,255,255),cv2.FILLED)
         #    pts_displayed_frame = pts_video_white
         pts_displayed_frame = coords_lists[idx_next_displayed_frame]
-        if idx_next_displayed_frame == 0:
-            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
-        elif idx_next_displayed_frame == len(vid_list)-1:
-            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
-        else:
-            cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-            cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
+        if len(vid_list) == 1:
+            if len(pts_displayed_frame) == 4:
+                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
+            elif len(pts_displayed_frame) == 6:
+                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (255,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[5][0], pts_displayed_frame[5][1]), 2, (255,0,255),cv2.FILLED)
+        elif len(vid_list) > 1:
+            if idx_next_displayed_frame == 0:
+                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
+            elif idx_next_displayed_frame == len(vid_list)-1:
+                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
+            else:
+                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
+                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
 
         # update the different statistics
         # statistics for possession and passing accuracy which needs to ball to be detected for the current frame
@@ -955,7 +1005,7 @@ def main(_argv):
             cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 1, (255,0,0),cv2.FILLED)
             cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 1, (255,0,255),cv2.FILLED)
         # draw all valid detections recorded on every frame at current time step of each video on 2D map
-        for pi in tot_rec_points_per_frame[i]:
+        for pi in total_recorded_points[i]:
             if pi[0] == 0:
                 if pi[4] == idx_next_displayed_frame:
                     cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
