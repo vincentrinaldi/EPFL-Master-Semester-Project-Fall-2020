@@ -458,6 +458,7 @@ def main(_argv):
             ####################################################################
             """
 
+            # initialize ball position on current processed frame
             ball_position = None
 
             # predict ball detection confidence score on every pixel of the frame with background subtraction
@@ -978,7 +979,7 @@ def main(_argv):
                     heatmap_values[pi[2]][pi[1]] += 1
 
         # shrink bird's-eye view image
-        scale_percent = FLAGS.img_scale_shrink
+        scale_percent = cv2.imread(FLAGS.img_input)
         new_width = int(bird_eye.shape[1] * scale_percent / 100)
         new_height = int(bird_eye.shape[0] * scale_percent / 100)
         bird_eye = cv2.resize(bird_eye, (new_width, new_height), interpolation = cv2.INTER_AREA)
