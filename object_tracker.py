@@ -273,6 +273,7 @@ def main(_argv):
     # associate a subfolder to each video
     for i in range(len(vid_list)):
         os.mkdir("processing/" + str(i+1))
+        os.mkdir("processing/" + str(i+1) + "_bs")
 
     # store for each frame of each video the nearest bbox from the ball if the latter has been detected
     nearest_bbox_from_ball = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
@@ -500,7 +501,7 @@ def main(_argv):
                     cv2.circle(frame, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     cv2.circle(frame_backSub, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     # save masked frame with background subtraction
-                    save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
+                    save_path = "processing/" + str(idx+1) + "_bs/" + str(frame_num) + ".jpg"
                     cv2.imwrite(save_path, frame_backSub)
 
                     x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+FLAGS.ball_radius)
@@ -521,7 +522,7 @@ def main(_argv):
                     cv2.circle(frame, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     cv2.circle(frame_backSub, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     # save masked frame with background subtraction
-                    save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
+                    save_path = "processing/" + str(idx+1) + "_bs/" + str(frame_num) + ".jpg"
                     cv2.imwrite(save_path, frame_backSub)
 
                     x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+FLAGS.ball_radius)
