@@ -33,6 +33,7 @@ import time
 import cv2
 import math
 import shutil
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from absl import app, flags, logging
@@ -451,6 +452,7 @@ def main(_argv):
 			# apply background subtraction on current frame
             foreGroundMask = backSub.apply(frame)
             frame_backSub = cv2.bitwise_and(frame, frame, mask = foreGroundMask)
+            frame_backSub_jersey = copy.deepcopy(frame_backSub)
 
             """
             ####################################################################
@@ -594,7 +596,7 @@ def main(_argv):
             """
 
             # switch masked frame from RGB to BGR (or HSV) mode
-            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV)
+            frame_to_mask = cv2.cvtColor(frame_backSub_jersey, cv2.COLOR_RGB2HSV)
 
             # red mask range (HSV)
             ref_low_1 = (0, 100, 100)
@@ -960,7 +962,7 @@ def main(_argv):
         """
 
         # retrieve original bird’s-eye view image
-        bird_eye = mini_map_img
+        bird_eye = copy.deepcopy(mini_map_img)
         # if enable info flag draw all 4-points landmark areas on mini-map
         if FLAGS.info:
             for pts_map in mini_coords_lists:
@@ -979,7 +981,7 @@ def main(_argv):
                     heatmap_values[pi[2]][pi[1]] += 1
 
         # shrink bird's-eye view image
-        scale_percent = cv2.imread(FLAGS.img_input)
+        scale_percent = FLAGS.img_scale_shrink
         new_width = int(bird_eye.shape[1] * scale_percent / 100)
         new_height = int(bird_eye.shape[0] * scale_percent / 100)
         bird_eye = cv2.resize(bird_eye, (new_width, new_height), interpolation = cv2.INTER_AREA)
@@ -1008,9 +1010,8 @@ def main(_argv):
     ####################################################################
     """
 
-    # load again the initial bird-eye view image and switch to BGRA channels mode
-    heatmap_background = cv2.imread(FLAGS.img_input)
-    heatmap_background = cv2.cvtColor(heatmap_background, cv2.COLOR_BGR2BGRA)
+    # switch the bird-eye view image to BGRA channels mode
+    heatmap_background = cv2.cvtColor(mini_map_img, cv2.COLOR_BGR2BGRA)
 
     # convert the range of raw heatmap values to the range of color map values maintaining ratio
     for i in range(heatmap_background.shape[0]):
