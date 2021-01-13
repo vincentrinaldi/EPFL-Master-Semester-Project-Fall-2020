@@ -59,14 +59,21 @@ flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video')
 flags.DEFINE_string('landmark_coords', '278,98-0,460-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,460-1642,98',
                     'landmark 2D coordinates on frames for each video in the form x1,y1-x2,y2-...-x5,y5 or x1,y1-x2,y2-...-x4,y4 | \
-                    1st REMINDER : 5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth_point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth_point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left, bottom-left, bottom-right, top-right}) | \
+                    1st REMINDER : 5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left, bottom-left, bottom-right, top-right}) | \
                     2nd REMINDER : each list of points for a given video has to be separated from others by a + | \
-                    3rd REMINDER : first list of coordinates on frames must be related to first video specified in VIDEO flag, second list to second video specified in VIDEO flag, ect...')
+                    3rd REMINDER : in the case there is only one input video then 6 (x,y) points (in the order {top-left -> fifth point -> bottom-left -> bottom-right -> sixth point -> top-right}) or 4 (x,y) points (in the order {top-left, bottom-left, bottom-right, top-right}) are expected | \
+                    4th REMINDER : first list of coordinates on frames must be related to first video specified in VIDEO flag, second list to second video specified in VIDEO flag, ect...')
 flags.DEFINE_string('mini_landmark_coords', '0,0-22,320-142,320-190,0+142,0-190,320-307,320-355,0+307,0-355,320-475,320-497,0',
                     'landmark 2D coordinates on mini-map for each video in the form x1,y1-x2,y2-...-x4,y4 | \
                     1st REMINDER : 4 (x,y) points are expected for either filmed part of the field (in the order {top-left -> bottom-left -> bottom-right -> top-right} | \
                     2nd REMINDER : each list of points for a given video has to be separated from others by a + | \
                     3rd REMINDER : first list of coordinates on mini-map must be related to first video specified in VIDEO flag, second list to second video specified in VIDEO flag, ect...')
+flags.DEFINE_string('ball_range_update', "100,100", "potential range in pixels between the current ball position we are trying to predict and the previous recorded ball position in the form range_x,range_y")
+flags.DEFINE_float('ball_threshold', 0.999999, 'ball detection threshold')
+flags.DEFINE_integer('ball_radius', 12, 'ball radius in pixels on video frame')
+flags.DEFINE_string('max_bbox_dim', '110,170', 'maximum acceptable bbox dimensions in pixels of detected object in the form max_width,max_height')
+flags.DEFINE_string('img_input', './data/img/football_field.jpg', 'path to mini-map image')
+flags.DEFINE_integer('img_scale_shrink', 60, 'shrink the mini-map to the specified scale in %')
 
 def main(_argv):
 
@@ -126,8 +133,8 @@ def main(_argv):
         vid_list.append(curr_vid)
 
     # definition of width height fps and frame length of output video
-    max_width = max(int(curr_vid.get(cv2.CAP_PROP_FRAME_WIDTH)) for curr_vid in vid_list)
-    max_height = max(int(curr_vid.get(cv2.CAP_PROP_FRAME_HEIGHT)) for curr_vid in vid_list)
+    max_width = 1920
+    max_height = 1088
     max_fps = max(int(curr_vid.get(cv2.CAP_PROP_FPS)) for curr_vid in vid_list)
     final_vid_len = min(int(curr_vid.get(cv2.CAP_PROP_FRAME_COUNT)) for curr_vid in vid_list)
     if FLAGS.vid_len != -1:
@@ -149,6 +156,7 @@ def main(_argv):
     mini_map_poly = None
     matrix_list = []
 
+    # in the case we only have one input video
     if len(vid_list) == 1:
 
         # definition of 4-points landmark on frames for each video
@@ -192,6 +200,7 @@ def main(_argv):
             curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
             matrix_list.append(curr_matrix)
 
+    # in the case we have several input videos
     elif len(vid_list) > 1:
 
         # definition of 4-points landmark on frames for each video
@@ -239,7 +248,7 @@ def main(_argv):
             mini_coords_lists[i] = np.float32(mini_coords_lists[i])
 
         # create polygon for mid side camera angle on mini-map to remove potential player duplications when filmed by two different cameras
-        # WARNING : We only perform this operation when we have three camera angles (one filming the middle of the field and the two others filming each end of the field)
+        # Note : At the moment we only perform this operation when we have three camera angles (one filming the middle of the field and the two others filming each end of the field)
         if len(vid_list) == 3:
             top_left, bottom_left, bottom_right, top_right = (mini_coords_lists[1][0][0], mini_coords_lists[1][0][1]), (mini_coords_lists[1][1][0], mini_coords_lists[1][1][1]), (mini_coords_lists[1][2][0], mini_coords_lists[1][2][1]), (mini_coords_lists[1][3][0], mini_coords_lists[1][3][1])
             mini_map_poly = Polygon([top_left, bottom_left, bottom_right, top_right])
@@ -256,30 +265,6 @@ def main(_argv):
             pts_map = mini_coords_lists[i]
             curr_matrix = cv2.getPerspectiveTransform(pts_video, pts_map)
             matrix_list.append(curr_matrix)
-
-    #pts_video_blue = np.float32([[278,98],[1920,98],[0,1038],[1920,1038]]) #Blue side 1
-    #pts_video_mid = np.float32([[0,98],[1920,98],[0,1038],[1920,1038]]) #Mid side 1
-    #pts_video_white = np.float32([[0,98],[1642,98],[0,1038],[1920,1038]]) #White side 1
-
-    #blue_coords_field_poly = [(pts_video_blue[0][0], pts_video_blue[0][1]), (0, 460), (pts_video_blue[2][0], pts_video_blue[2][1]), (pts_video_blue[3][0], pts_video_blue[3][1]), (pts_video_blue[1][0], pts_video_blue[1][1])]
-    #blue_side_field_poly = Polygon(blue_coords_field_poly)
-    #mid_coords_field_poly = [(pts_video_mid[0][0], pts_video_mid[0][1]), (pts_video_mid[2][0], pts_video_mid[2][1]), (pts_video_mid[3][0], pts_video_mid[3][1]), (pts_video_mid[1][0], pts_video_mid[1][1])]
-    #mid_side_field_poly = Polygon(mid_coords_field_poly)
-    #white_coords_field_poly = [(pts_video_white[0][0], pts_video_white[0][1]), (pts_video_white[2][0], pts_video_white[2][1]), (pts_video_white[3][0], pts_video_white[3][1]), (1920, 460), (pts_video_white[1][0], pts_video_white[1][1])]
-    #white_side_field_poly = Polygon(white_coords_field_poly)
-
-    #pts_map_blue = np.float32([[0,0],[190,0],[22,320],[142,320]]) #Blue side 1 2D
-    #pts_map_mid = np.float32([[142,0],[355,0],[190,320],[307,320]]) #Mid side 1 2D
-    #pts_map_white = np.float32([[307,0],[497,0],[355,320],[475,320]]) #White side 1 2D
-
-    #mid_coords_map_poly = [(pts_map_mid[0][0], pts_map_mid[0][1]), (pts_map_mid[2][0], pts_map_mid[2][1]), (pts_map_mid[3][0], pts_map_mid[3][1]), (pts_map_mid[1][0], pts_map_mid[1][1])]
-    #mid_side_map_poly = Polygon(mid_coords_map_poly)
-
-    #matrix_blue = cv2.getPerspectiveTransform(pts_video_blue, pts_map_blue)
-    #matrix_mid = cv2.getPerspectiveTransform(pts_video_mid, pts_map_mid)
-    #matrix_white = cv2.getPerspectiveTransform(pts_video_white, pts_map_white)
-
-    #matrix_list = [matrix_blue, matrix_mid, matrix_white]
 
     # create brand new folder to save frames locally
     shutil.rmtree("processing", ignore_errors = True)
@@ -298,10 +283,10 @@ def main(_argv):
     # store the number of times a frame has been designed to be the best one for each video
     count_best_frame_ball_detection = [[0 for i in range(len(vid_list))] for j in range(int((final_vid_len - 1)/max_fps) + 1)]
 
-    # store ball detection scores higher than true ball threshold (TODO: Iteration)
+    # store ball detection scores higher than true ball threshold
     ball_detection_scores = [[None for i in range(len(vid_list))] for j in range(final_vid_len)]
 
-    # initialize list of detections to draw as dots on 2D map for each selected frame
+    # initialize list of detections to draw as dots on mini-map for each selected frame
     total_recorded_points = [[] for i in range(final_vid_len)]
 
     # start iteration on each video frame of every video
@@ -311,8 +296,11 @@ def main(_argv):
         backSub = cv2.createBackgroundSubtractorKNN()
 
         # initialize variables for validation of ball detection
-        pos_range_x = 100
-        pos_range_y = 100
+        max_ball_range_update = FLAGS.ball_range_update.split(",")
+        max_ball_range_x = int(max_ball_range_update[0])
+        max_ball_range_y = int(max_ball_range_update[1])
+        pos_range_x = max_ball_range_x
+        pos_range_y = max_ball_range_y
         prev_pos_x = None
         prev_pos_y = None
 
@@ -463,110 +451,6 @@ def main(_argv):
             foreGroundMask = backSub.apply(frame)
             frame_backSub = cv2.bitwise_and(frame, frame, mask = foreGroundMask)
 
-            # switch masked frame from RGB to BGR (or HSV) mode
-            #frame_to_mask = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) #TOREMOVE
-            #frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2BGR) #Test
-            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV) #Test
-
-            #"""
-            # Colors
-            # Range of H values :
-            #red = 165 to 179 & 0 to 14
-            #yellow = 15 to 44
-            #green = 45 to 74
-            #cyan = 75 to 104
-            #blue = 105 to 134
-            #magenta = 135 to 164
-            # S values are 25 to 255
-            # V values are 125 to 255
-
-            # Non colors
-            # H values are 0 to 255
-            # Range of S and V values :
-            #white = 0 to 24 // 125 to 255
-            #black = 0 to 255 // 0 to 124
-
-            # red mask range (HSV)
-            #ref_low_1 = (0, 25, 125)
-            #ref_low_1 = (0, 76, 76)
-            ref_low_1 = (0, 100, 100)
-            #ref_high_1 = (14, 255, 255)
-            ref_high_1 = (9, 255, 255)
-            #ref_low_2 = (165, 25, 125)
-            #ref_low_2 = (165, 76, 76)
-            ref_low_2 = (170, 100, 100)
-            ref_high_2 = (179, 255, 255)
-
-            # blue mask range (HSV)
-            #home_low = (105, 25, 125)
-            #home_low = (105, 76, 76)
-            home_low = (110, 75, 75)
-            #home_high = (134, 255, 255)
-            home_high = (130, 255, 255)
-
-            # white mask range (HSV)
-            #away_low = (0,0,125)
-            #away_low = (0,0,180)
-            away_low = (0,0,180)
-            #away_high = (255,24,255)
-            #away_high = (179,75,255)
-            away_high = (179,75,255)
-
-            mask_ref_1 = cv2.inRange(frame_to_mask, ref_low_1, ref_high_1)
-            mask_ref_2 = cv2.inRange(frame_to_mask, ref_low_2, ref_high_2)
-            mask_ref = cv2.bitwise_or(mask_ref_1, mask_ref_2)
-            mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
-            mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
-
-            # home goalie mask range (HSV) #Test
-            home_goalie_low = (25,100,100)
-            home_goalie_high = (35,255,255)
-            mask_home_goalie = cv2.inRange(frame_to_mask, home_goalie_low, home_goalie_high)
-            frame_masked_home_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home_goalie)
-
-            # away goalie mask range (HSV) #Test
-            away_goalie_low = (40,20,120)
-            away_goalie_high = (90,80,230)
-            mask_away_goalie = cv2.inRange(frame_to_mask, away_goalie_low, away_goalie_high)
-            frame_masked_away_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away_goalie)
-
-            """
-
-            # red mask range (BGR)
-            #ref_low = (17, 15, 75)
-            #ref_high = (50, 56, 200)
-            #ref_low = (16, 16, 96)
-            #ref_high = (31, 31, 255)
-            ref_low = (16, 16, 72)
-            ref_high = (47, 55, 200)
-
-            # blue mask range (BGR)
-            #home_low = (43, 31, 4)
-            #home_high = (250, 88, 50)
-            #home_low = (48, 32, 32)
-            #home_high = (255, 47, 47)
-            home_low = (40, 32, 8)
-            home_high = (247, 87, 47)
-
-            # white mask range (BGR)
-            #away_low = (187,169,112)
-            #away_high = (255,255,255)
-            #away_low = (224,224,224)
-            #away_high = (255,255,255)
-            away_low = (184,168,112)
-            away_high = (255,255,255)
-
-            # create the different masks for referees, home and away teams jersey
-            mask_ref = cv2.inRange(frame_to_mask, ref_low, ref_high)
-            mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
-            mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
-            """
-
-            # apply each mask on the same current frame to create three resulting masked frames
-            frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
-            frame_masked_home = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home)
-            frame_masked_away = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away)
-
             """
             ####################################################################
             Run DeepBall detector
@@ -575,8 +459,7 @@ def main(_argv):
 
             ball_position = None
 
-            # predict ball detection confidence score on every pixel of the frame
-            #cmap = deep_ball_model.predict(np.array([cv2.resize(frame.astype(np.float32), (480,272))]), batch_size=1, verbose=0) #TOREMOVE
+            # predict ball detection confidence score on every pixel of the frame with background subtraction
             cmap = deep_ball_model.predict(np.array([cv2.resize(frame_backSub.astype(np.float32), (480,272))]), batch_size=1, verbose=0)
             cm = cmap[0,:,:,0]
 
@@ -586,12 +469,14 @@ def main(_argv):
 
             # retrieve highest ball detection confidence score value
             scr = cm[y,x]
-            #print(scr) #TOREMOVE
+            # if enable info flag then print best ball detection confidence score for the current frame
+            if FLAGS.info:
+                print(scr)
             cv2.rectangle(frame, (0,0), (700,50), (255,0,0), -1)
             cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
             # check if highest ball detection confidence score is less than minimum acceptable threshold
-            x = -1 if scr < 0.999999 else x
+            x = -1 if scr < FLAGS.ball_threshold else x
 
             # compute coordinates of highest ball detection confidence score pixel on full size frame
             ky, kx = 4 * frame_size[0]/272.0, 4 * frame_size[1]/480.0
@@ -612,19 +497,19 @@ def main(_argv):
                     cv2.rectangle(frame, (0,0), (700,50), (0,255,0), -1)
                     cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
-                    cv2.circle(frame, (x, y), 12, (255,255,0), 2)
-                    cv2.circle(frame_backSub, (x, y), 12, (255,255,0), 2)
+                    cv2.circle(frame, (x, y), FLAGS.ball_radius, (255,255,0), 2)
+                    cv2.circle(frame_backSub, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     # save masked frame with background subtraction
                     save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
                     cv2.imwrite(save_path, frame_backSub)
 
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+12)
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+FLAGS.ball_radius)
                     points_info.append((0, x_img, y_img, (255,255,0), idx))
 
                     ball_position = (x, y)
 
-                    pos_range_x = 100
-                    pos_range_y = 100
+                    pos_range_x = max_ball_range_x
+                    pos_range_y = max_ball_range_y
                     prev_pos_x = x
                     prev_pos_y = y
                 # if the ball detection is in a certain range from the previous valid ball detection then we consider that it is a valid ball detection and reset the range in addition to updating the previous valid ball detection position
@@ -633,32 +518,32 @@ def main(_argv):
                     cv2.rectangle(frame, (0,0), (700,50), (0,255,0), -1)
                     cv2.putText(frame, str(scr) + "-" + str(frame_num), (10, 30), 0, 0.75, (0,0,0), 2)
 
-                    cv2.circle(frame, (x, y), 12, (255,255,0), 2)
-                    cv2.circle(frame_backSub, (x, y), 12, (255,255,0), 2)
+                    cv2.circle(frame, (x, y), FLAGS.ball_radius, (255,255,0), 2)
+                    cv2.circle(frame_backSub, (x, y), FLAGS.ball_radius, (255,255,0), 2)
                     # save masked frame with background subtraction
                     save_path = "processing/" + str(idx) + "_" + str(frame_num) + ".jpg"
                     cv2.imwrite(save_path, frame_backSub)
 
-                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+12)
+                    x_img, y_img = transform_coordinates_from_3D_to_2D(matrix_list[idx], x, y+FLAGS.ball_radius)
                     points_info.append((0, x_img, y_img, (255,255,0), idx))
 
                     ball_position = (x, y)
 
-                    pos_range_x = 100
-                    pos_range_y = 100
+                    pos_range_x = max_ball_range_x
+                    pos_range_y = max_ball_range_y
                     prev_pos_x = x
                     prev_pos_y = y
                 # otherwise it's not a consistent next position and we increase the range where the ball can be from the last valid detection position
                 else:
-                    pos_range_x += 100
-                    pos_range_y += 100
+                    pos_range_x += max_ball_range_x
+                    pos_range_y += max_ball_range_y
             # otherwise we increase the range where the ball can be from the last valid detection position
             else:
                 ball_detection_scores[frame_num-1][idx] = 0
-                pos_range_x += 100
-                pos_range_y += 100
+                pos_range_x += max_ball_range_x
+                pos_range_y += max_ball_range_y
 
-            # if we are processing the last video we fill the array of ordered video index from which to display the frame on the final video
+            # if we are processing the last video we update the "focus" score of each video for the current frame number in order to decide which video to display for the current processed second on the final video
             if idx == len(vid_list)-1:
                 max_rec = -1
                 idx_max = []
@@ -677,6 +562,80 @@ def main(_argv):
             ####################################################################
             """
 
+            """
+            ####################################################################
+            Apply Jersey Color Detection Masks
+
+            Note: At the moment, for the jersey, we always assume that:
+            - The referee is red
+            - The home team is blue with a yellow goal keeper
+            - The away team is white with a black goal keeper
+
+            --- HSV Table Reference Guide ---
+
+            ### H values :
+            red = 0 to 14 & 165 to 179
+            yellow = 15 to 44
+            green = 45 to 74
+            cyan = 75 to 104
+            blue = 105 to 134
+            magenta = 135 to 164
+
+            ### S values :
+            white = 0 to 63
+            (others) = 63 to 255
+
+            ### V values
+            #black = 0 to 64
+            (others) = 64 to 255
+            ####################################################################
+            """
+
+            # switch masked frame from RGB to BGR (or HSV) mode
+            frame_to_mask = cv2.cvtColor(frame_backSub, cv2.COLOR_RGB2HSV)
+
+            # red mask range (HSV)
+            ref_low_1 = (0, 100, 100)
+            ref_high_1 = (9, 255, 255)
+            ref_low_2 = (170, 100, 100)
+            ref_high_2 = (179, 255, 255)
+
+            # blue mask range (HSV)
+            home_low = (110, 75, 75)
+            home_high = (130, 255, 255)
+
+            # white mask range (HSV)
+            away_low = (0,0,180)
+            away_high = (179,75,255)
+
+            # home goalie mask range (HSV)
+            home_goalie_low = (25,100,100)
+            home_goalie_high = (35,255,255)
+
+            # away goalie mask range (HSV)
+            away_goalie_low = (40,20,120)
+            away_goalie_high = (90,80,230)
+
+            # create the color mask for each specified color ranges
+            mask_ref_1 = cv2.inRange(frame_to_mask, ref_low_1, ref_high_1)
+            mask_ref_2 = cv2.inRange(frame_to_mask, ref_low_2, ref_high_2)
+            mask_ref = cv2.bitwise_or(mask_ref_1, mask_ref_2)
+            mask_home = cv2.inRange(frame_to_mask, home_low, home_high)
+            mask_away = cv2.inRange(frame_to_mask, away_low, away_high)
+            mask_home_goalie = cv2.inRange(frame_to_mask, home_goalie_low, home_goalie_high)
+            mask_away_goalie = cv2.inRange(frame_to_mask, away_goalie_low, away_goalie_high)
+
+            # apply each mask on the same current frame to create three resulting masked frames
+            frame_masked_ref = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_ref)
+            frame_masked_home = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home)
+            frame_masked_away = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away)
+            frame_masked_home_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_home_goalie)
+            frame_masked_away_goalie = cv2.bitwise_and(frame_to_mask, frame_to_mask, mask = mask_away_goalie)
+
+            """
+            ####################################################################
+            """
+
             # update tracks
             for track in tracker.tracks:
 
@@ -689,14 +648,13 @@ def main(_argv):
                 curr_bbox_y = int(track.to_tlbr()[3])
                 curr_bbox_pos = Point(curr_bbox_x, curr_bbox_y)
 
-                # check validity of current bbox position
-                #in_blue_side_but_not_inside_blue_poly = idx == 0 and not curr_bbox_pos.within(blue_side_field_poly)
-                #in_mid_side_but_not_inside_mid_poly = idx == 1 and not curr_bbox_pos.within(mid_side_field_poly)
-                #in_white_side_but_not_inside_white_poly = idx == 2 and not curr_bbox_pos.within(white_side_field_poly)
-                #bool_invalid_bbox_pos = in_blue_side_but_not_inside_blue_poly or in_mid_side_but_not_inside_mid_poly or in_white_side_but_not_inside_white_poly
+                # retrieve maximum acceptable bbox dimensions
+                max_bbox_dimensions = FLAGS.max_bbox_dim.split(",")
+                max_bbox_width = int(max_bbox_dimensions[0])
+                max_bbox_height = int(max_bbox_dimensions[1])
 
                 # compute boolean gathering validity of dimensions and position of current bbox
-                bool_curr_bbox_properties = curr_bbox_width > 110 or curr_bbox_height > 170 or not curr_bbox_pos.within(polygons_list[idx])
+                bool_curr_bbox_properties = curr_bbox_width > max_bbox_width or curr_bbox_height > max_bbox_height or not curr_bbox_pos.within(polygons_list[idx])
 
                 if not track.is_confirmed() or track.time_since_update > 1 or bool_curr_bbox_properties:
                     continue
@@ -707,22 +665,18 @@ def main(_argv):
                 crop_image_ref = frame_masked_ref[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
                 crop_image_home = frame_masked_home[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
                 crop_image_away = frame_masked_away[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+                crop_image_home_goalie = frame_masked_home_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+                crop_image_away_goalie = frame_masked_away_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
 
                 # compute black pixels ratio of current bbox area on each masked frames
                 ref_ratio = black_pixels_ratio(crop_image_ref)
                 home_ratio = black_pixels_ratio(crop_image_home)
                 away_ratio = black_pixels_ratio(crop_image_away)
-
-                #Test
-                crop_image_home_goalie = frame_masked_home_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
                 home_goalie_ratio = black_pixels_ratio(crop_image_home_goalie)
-                crop_image_away_goalie = frame_masked_away_goalie[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
                 away_goalie_ratio = black_pixels_ratio(crop_image_away_goalie)
 
                 # create list gathering every ratio result
-                #ratio_list = [ref_ratio, home_ratio, away_ratio]
-                ratio_list = [ref_ratio, home_ratio, away_ratio, home_goalie_ratio, away_goalie_ratio] #Test
-                #print(track.track_id, ratio_list) #Test
+                ratio_list = [ref_ratio, home_ratio, away_ratio, home_goalie_ratio, away_goalie_ratio]
 
                 # compute displayed color of current bbox and its text by choosing the lowest ratio of black pixels
                 color_box = None
@@ -730,7 +684,7 @@ def main(_argv):
                 if min(ratio_list) == ref_ratio:
                     color_box = (255,0,0)
                     color_text = (255,255,255)
-                elif min(ratio_list) == home_ratio or min(ratio_list) == home_goalie_ratio: #Test
+                elif min(ratio_list) == home_ratio or min(ratio_list) == home_goalie_ratio:
                     color_box = (0,0,255)
                     color_text = (255,255,255)
                 else:
@@ -765,7 +719,7 @@ def main(_argv):
             for pi in points_info:
                 if FLAGS.info:
                     print("2D Point - Tracker ID: {}, X coord: {}, Y coord: {}, RGB color code: {}, Video idx: {}".format(pi[0], pi[1], pi[2], pi[3], pi[4]))
-                # if it's not the ball and not detected on mid camera angle then if it's inside mid polygon we don't add it to list
+                # if we are processing 3 videos and the current point is not the ball and is detected by a left or right end camera angle then if it's inside mid polygon we don't add it to list
                 if idx != 1 and pi[0] != 0 and len(vid_list) == 3:
                     curr_point = Point(pi[1], pi[2])
                     if not curr_point.within(mini_map_poly):
@@ -773,23 +727,19 @@ def main(_argv):
                 else:
                     total_recorded_points[frame_num-1].append(pi)
 
+            # find the bbox having its center being the closest to the ball among all other bboxes
             if ball_position != None:
                 recorded_ball_positions[frame_num-1][idx] = ball_position
-                min_dist = 999999
+                min_dist = frame_size[0] * frame_size[1]
                 selected_bbox_idx = -1
                 for bi_idx, bi in enumerate(bboxs_info):
                     if bi[5] != (255,0,0):
                         center_bbox = Point((bi[1]+bi[3])/2, (bi[2]+bi[4])/2)
                         ball_point = Point(ball_position[0], ball_position[1])
                         distance_to_center_bbox = ball_point.distance(center_bbox)
-                        #print(bi) #TOREMOVE
-                        #print(center_bbox) #TOREMOVE
-                        #print(ball_point) #TOREMOVE
-                        #print(bi[0], distance_to_center_bbox) #TOREMOVE
                         if min_dist > distance_to_center_bbox:
                             min_dist = distance_to_center_bbox
                             selected_bbox_idx = bi_idx
-                #print(selected_bbox_idx) #TOREMOVE
                 if selected_bbox_idx != -1:
                     selected_bbox = bboxs_info[selected_bbox_idx]
                     nearest_bbox_from_ball[frame_num-1][idx] = (selected_bbox[0], min_dist, selected_bbox[5])
@@ -798,15 +748,15 @@ def main(_argv):
             fps = 1.0 / (time.time() - start_time)
             print("FPS: %.2f" % fps)
 
-    #print(count_best_frame_ball_detection) #TOREMOVE
-
     # initialize variable to store index of video of next frame to display with middle part angle as priority
     idx_next_displayed_frame = len(vid_list)/2
 
+    # initialize variables used for possession statistics
     nb_possession_frames = 0
     possession_home = 0
     possession_away = 0
 
+    # initialize variables used for passing statistics
     prev_possession = None
     currently_passing = False
     total_passes_home = 0
@@ -814,9 +764,11 @@ def main(_argv):
     total_passes_away = 0
     correct_passes_away = 0
 
-    #polygons_list = [blue_side_field_poly, mid_side_field_poly, white_side_field_poly]
+    # load bird’s-eye view image
+    bird_eye = cv2.imread(FLAGS.img_input)
 
-    heatmap_values = [[0 for i in range(498)] for j in range(321)]
+    # initialize heatmap values
+    heatmap_values = [[0 for i in range(bird_eye.shape[1])] for j in range(bird_eye.shape[0])]
 
     # start computation of output video
     for i in range(final_vid_len):
@@ -832,50 +784,43 @@ def main(_argv):
         # switch loaded frame from RGB to BGR mode
         result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-        # draw the corresponding 4-points landmark area on output video frame
-        #pts_displayed_frame = None
-        #if idx_next_displayed_frame == 0:
-        #    cv2.circle(result, (0, 460), 2, (0,255,255),cv2.FILLED)
-        #    pts_displayed_frame = pts_video_blue
-        #elif idx_next_displayed_frame == 1:
-        #    pts_displayed_frame = pts_video_mid
-        #else:
-        #    cv2.circle(result, (1920, 460), 2, (0,255,255),cv2.FILLED)
-        #    pts_displayed_frame = pts_video_white
-        pts_displayed_frame = coords_lists[idx_next_displayed_frame]
-        if len(vid_list) == 1:
-            if len(pts_displayed_frame) == 4:
-                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
-            elif len(pts_displayed_frame) == 6:
-                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (255,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[5][0], pts_displayed_frame[5][1]), 2, (255,0,255),cv2.FILLED)
-        elif len(vid_list) > 1:
-            if idx_next_displayed_frame == 0:
-                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
-            elif idx_next_displayed_frame == len(vid_list)-1:
-                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (255,0,255),cv2.FILLED)
-            else:
-                cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,0,0),cv2.FILLED)
-                cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,0,255),cv2.FILLED)
+        # if enable info flag then draw the corresponding 4-points landmark area on output video frame
+        if FLAGS.info:
+            pts_displayed_frame = coords_lists[idx_next_displayed_frame]
+            if len(vid_list) == 1:
+                if len(pts_displayed_frame) == 4:
+                    cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
+                elif len(pts_displayed_frame) == 6:
+                    cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[5][0], pts_displayed_frame[5][1]), 2, (0,255,255),cv2.FILLED)
+            elif len(vid_list) > 1:
+                if idx_next_displayed_frame == 0:
+                    cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (0,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (255,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (0,255,255),cv2.FILLED)
+                elif idx_next_displayed_frame == len(vid_list)-1:
+                    cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[4][0], pts_displayed_frame[4][1]), 2, (0,255,255),cv2.FILLED)
+                else:
+                    cv2.circle(result, (pts_displayed_frame[0][0], pts_displayed_frame[0][1]), 2, (0,0,255),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[1][0], pts_displayed_frame[1][1]), 2, (0,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[2][0], pts_displayed_frame[2][1]), 2, (255,255,0),cv2.FILLED)
+                    cv2.circle(result, (pts_displayed_frame[3][0], pts_displayed_frame[3][1]), 2, (0,255,255),cv2.FILLED)
 
-        # update the different statistics
+        """
+        ####################################################################
+        Update possession and passing statistics
+        ####################################################################
+        """
+
         # statistics for possession and passing accuracy which needs to ball to be detected for the current frame
         if nearest_bbox_from_ball[i][idx_next_displayed_frame] != None:
             # check which player from which team is the closest to the ball
@@ -975,6 +920,16 @@ def main(_argv):
         ratio_pass_away = str(correct_passes_away) + "/" + str(total_passes_away)
         cv2.putText(result, str(pass_accuracy_home) + "%" + " (" + ratio_pass_home + ")" + " - Pass Accuracy - " + str(pass_accuracy_away) + "%" + " (" + ratio_pass_away + ")", (10, 1068), 0, 0.75, (0,0,0), 2)
 
+        """
+        ####################################################################
+        """
+
+        """
+        ####################################################################
+        Compute Current Play Phase
+        ####################################################################
+        """
+
         # we display the current phase of the play according to ball position
         if recorded_ball_positions[i][idx_next_displayed_frame] != None:
             ball_pos = recorded_ball_positions[i][idx_next_displayed_frame]
@@ -994,28 +949,35 @@ def main(_argv):
             cv2.rectangle(result, (810,0), (1110,50), (0,0,0), -1)
             cv2.putText(result, "No Ball Detected", (820, 30), 0, 0.75, (255,255,255), 2)
 
-        # load bird’s-eye view image and draw all landmark areas on 2D map
-        bird_eye = cv2.imread("data/img/football_field.jpg")
-        cv2.circle(bird_eye, (0, 180), 2, (0,255,255),cv2.FILLED)
-        cv2.circle(bird_eye, (497, 180), 2, (0,255,255),cv2.FILLED)
-        #pts_map_list = [pts_map_blue, pts_map_mid, pts_map_white]
-        for pts_map in mini_coords_lists:
-            cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 1, (0,0,255),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[1][0], pts_map[1][1]), 1, (0,255,0),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 1, (255,0,0),cv2.FILLED)
-            cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 1, (255,0,255),cv2.FILLED)
-        # draw all valid detections recorded on every frame at current time step of each video on 2D map
+        """
+        ####################################################################
+        """
+
+        """
+        ####################################################################
+        Update Mini-Map
+        ####################################################################
+        """
+
+        # if enable info flag draw all 4-points landmark areas on mini-map
+        if FLAGS.info:
+            for pts_map in mini_coords_lists:
+                cv2.circle(bird_eye, (pts_map[0][0], pts_map[0][1]), 1, (0,0,255),cv2.FILLED)
+                cv2.circle(bird_eye, (pts_map[1][0], pts_map[1][1]), 1, (0,255,0),cv2.FILLED)
+                cv2.circle(bird_eye, (pts_map[2][0], pts_map[2][1]), 1, (255,255,0),cv2.FILLED)
+                cv2.circle(bird_eye, (pts_map[3][0], pts_map[3][1]), 1, (0,255,255),cv2.FILLED)
+        # draw all valid detections recorded on every frame at current time step of each video on mini-map
         for pi in total_recorded_points[i]:
             if pi[0] == 0:
                 if pi[4] == idx_next_displayed_frame:
                     cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
             else:
                 cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
-                if pi[3][2] == 255 and pi[3][1] == 0 and pi[3][0] == 0: #TODO:Flag
-                    heatmap_values[pi[2]][pi[1]] += 1 #Test
+                if pi[3][2] == 255 and pi[3][1] == 0 and pi[3][0] == 0: #TODO: Rework this line to let the user choose which kind of heatmap he wants
+                    heatmap_values[pi[2]][pi[1]] += 1
 
-        # shrink bird's-eye view image (TODO:Flag)
-        scale_percent = 60
+        # shrink bird's-eye view image
+        scale_percent = FLAGS.img_scale_shrink
         new_width = int(bird_eye.shape[1] * scale_percent / 100)
         new_height = int(bird_eye.shape[0] * scale_percent / 100)
         bird_eye = cv2.resize(bird_eye, (new_width, new_height), interpolation = cv2.INTER_AREA)
@@ -1024,6 +986,10 @@ def main(_argv):
         result_height, result_width = result.shape[:2]
         bird_eye_height, bird_eye_width = bird_eye.shape[:2]
         result[ int(result_height-bird_eye_height-50):int(result_height-50) , int((result_width/2)-(bird_eye_width/2)):int((result_width/2)+(bird_eye_width/2)) ] = bird_eye
+
+        """
+        ####################################################################
+        """
 
         if not FLAGS.dont_show:
             cv2.imshow("Output Video", result)
@@ -1034,45 +1000,54 @@ def main(_argv):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    heatmap_background = cv2.imread("data/img/football_field.jpg")
+    """
+    ####################################################################
+    Compute Heatmap
+    ####################################################################
+    """
+
+    # load again the initial bird-eye view image and switch to BGRA channels mode
+    heatmap_background = cv2.imread(FLAGS.img_input)
+    heatmap_background = cv2.cvtColor(heatmap_background, cv2.COLOR_BGR2BGRA)
+
+    # convert the range of raw heatmap values to the range of color map values maintaining ratio
     for i in range(heatmap_background.shape[0]):
         for j in range(heatmap_background.shape[1]):
-            heatmap_values[i][j] = int((float(heatmap_values[i][j]) / float(final_vid_len)) * 255)
+            heatmap_values[i][j] = int((float(heatmap_values[i][j]) / float(final_vid_len)) * 255) #TODO: We may modify the formula
+
+    # transform the heatmap values two-dimensional list into a frame on which we apply a color map
     heatmap_values = np.array(heatmap_values)
     heatmap_values = heatmap_values.astype(np.uint8)
     heatmap_values = cv2.applyColorMap(heatmap_values, cv2.COLORMAP_JET)
-    # write heatmap to img folder
-    #save_path = "data/img/heatmap_player_" + str(1) + ".jpg"
-    #cv2.imwrite(save_path, heatmap_values)
 
+    # switch from BGR to BGRA channels mode and make transparent every pixel that has the lowest value on the color map scale
     heatmap_values = cv2.cvtColor(heatmap_values, cv2.COLOR_BGR2BGRA)
     for i in range(heatmap_values.shape[0]):
         for j in range(heatmap_values.shape[1]):
             if heatmap_values[i][j][0] == 128 and heatmap_values[i][j][1] == 0 and heatmap_values[i][j][2] == 0:
                 heatmap_values[i][j][3] = 0
 
-    #save_path = "data/img/heatmap_player_" + str(1) + "_transparency.png"
-    #cv2.imwrite(save_path, heatmap_values)
-
-    heatmap_background = cv2.cvtColor(heatmap_background, cv2.COLOR_BGR2BGRA)
-
-    # normalize alpha channels from 0-255 to 0-1
+    # normalize alpha channels from 0-255 to 0-1 for foreground and background
     alpha_background = heatmap_background[:,:,3] / 255.0
     alpha_foreground = heatmap_values[:,:,3] / 255.0
 
-    # set adjusted colors
+    # set adjusted BGR colors
     for color in range(0, 3):
         heatmap_background[:,:,color] = alpha_foreground * heatmap_values[:,:,color] + alpha_background * heatmap_background[:,:,color] * (1 - alpha_foreground)
 
     # set adjusted alpha and denormalize back to 0-255
     heatmap_background[:,:,3] = (1 - (1 - alpha_foreground) * (1 - alpha_background)) * 255
 
+    # write heatmap to img folder
     save_path = "data/img/heatmap_player_blue_final.png"
     cv2.imwrite(save_path, heatmap_background)
 
+    """
+    ####################################################################
+    """
+
     cv2.destroyAllWindows()
 
-### Vincent
 def black_pixels_ratio(crop_image):
     """
     Count the black pixel ratio on current masked bbox area
