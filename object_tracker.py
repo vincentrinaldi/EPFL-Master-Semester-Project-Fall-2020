@@ -756,7 +756,6 @@ def main(_argv):
     nb_possession_frames = 0
     possession_home = 0
     possession_away = 0
-
     # initialize variables used for passing statistics
     prev_possession = None
     currently_passing = False
@@ -766,10 +765,9 @@ def main(_argv):
     correct_passes_away = 0
 
     # load bird’s-eye view image
-    bird_eye = cv2.imread(FLAGS.img_input)
-
+    mini_map_img = cv2.imread(FLAGS.img_input)
     # initialize heatmap values
-    heatmap_values = [[0 for i in range(bird_eye.shape[1])] for j in range(bird_eye.shape[0])]
+    heatmap_values = [[0 for i in range(mini_map_img.shape[1])] for j in range(mini_map_img.shape[0])]
 
     # start computation of output video
     for i in range(final_vid_len):
@@ -960,6 +958,8 @@ def main(_argv):
         ####################################################################
         """
 
+        # retrieve original bird’s-eye view image
+        bird_eye = mini_map_img
         # if enable info flag draw all 4-points landmark areas on mini-map
         if FLAGS.info:
             for pts_map in mini_coords_lists:
