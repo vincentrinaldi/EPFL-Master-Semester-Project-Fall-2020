@@ -74,6 +74,7 @@ flags.DEFINE_float('ball_threshold', 0.999999, 'ball detection threshold')
 flags.DEFINE_integer('ball_radius', 12, 'ball radius in pixels on video frame')
 flags.DEFINE_string('max_bbox_dim', '110,170', 'maximum acceptable bbox dimensions in pixels of detected object in the form max_width,max_height')
 flags.DEFINE_string('img_input', './data/img/football_field.jpg', 'path to mini-map image')
+flags.DEFINE_integer('max_dist_possession', 70, 'maximum acceptable distance in pixels between the ball and the closest bbox center to consider being in Possession phase')
 flags.DEFINE_integer('img_scale_shrink', 60, 'shrink the mini-map to the specified scale in %')
 
 def main(_argv):
@@ -547,6 +548,10 @@ def main(_argv):
                 pos_range_x += max_ball_range_x
                 pos_range_y += max_ball_range_y
 
+            """
+            ####################################################################
+            """
+
             # if we are processing the last video we update the "focus" score of each video for the current frame number in order to decide which video to display for the current processed second on the final video
             if idx == len(vid_list)-1:
                 max_rec = -1
@@ -561,10 +566,6 @@ def main(_argv):
                 if max_rec != 0:
                     for i in idx_max:
                         count_best_frame_ball_detection[int((frame_num - 1)/max_fps)][i] += 1
-
-            """
-            ####################################################################
-            """
 
             """
             ####################################################################
@@ -784,7 +785,7 @@ def main(_argv):
         next_displayed_frame = cv2.imread(load_path)
 
         # switch loaded frame from RGB to BGR mode
-        result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR) #cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        result = cv2.cvtColor(next_displayed_frame, cv2.COLOR_RGB2BGR)
 
         # if enable info flag then draw the corresponding 4-points landmark area on output video frame
         if FLAGS.info:
@@ -840,7 +841,7 @@ def main(_argv):
 
             # check if the ball is too far from the player meaning we are in a passing phase or if the ball is very close to him meaning it's possession phase
             phase = None
-            if nearest_bbox_from_ball[i][idx_next_displayed_frame][1] > 70:
+            if nearest_bbox_from_ball[i][idx_next_displayed_frame][1] > FLAGS.max_dist_possession:
                 phase = "Passing"
                 currently_passing = True
             else:
@@ -928,11 +929,11 @@ def main(_argv):
 
         """
         ####################################################################
-        Compute Current Play Phase
+        Compute Current Ball State
         ####################################################################
         """
 
-        # we display the current phase of the play according to ball position
+        # we display the current state of the ball according to ball position
         if recorded_ball_positions[i][idx_next_displayed_frame] != None:
             ball_pos = recorded_ball_positions[i][idx_next_displayed_frame]
             ball_pt = Point(ball_pos[0], ball_pos[1])
