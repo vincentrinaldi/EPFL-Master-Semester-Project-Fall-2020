@@ -74,6 +74,9 @@ flags.DEFINE_float('ball_threshold', 0.999999, 'ball detection threshold')
 flags.DEFINE_integer('ball_radius', 12, 'ball radius in pixels on video frame')
 flags.DEFINE_string('max_bbox_dim', '110,170', 'maximum acceptable bbox dimensions in pixels of detected object in the form max_width,max_height')
 flags.DEFINE_string('img_input', './data/img/football_field.jpg', 'path to mini-map image')
+flags.DEFINE_string('heatmap', '', 'entity of which heatmap has to be computed | \
+                    1st REMINDER : possible values are any integer or among the following set of words: {ref, home, away} | \
+                    2nd REMINDER : every letter must be in lower case when entering one of the possible word')
 flags.DEFINE_integer('max_dist_possession', 70, 'maximum acceptable distance in pixels between the ball and the closest bbox center to consider being in Possession phase')
 flags.DEFINE_integer('img_scale_shrink', 60, 'shrink the mini-map to the specified scale in %')
 
@@ -772,6 +775,13 @@ def main(_argv):
     mini_map_img = cv2.imread(FLAGS.img_input)
     # initialize heatmap values
     heatmap_values = [[0 for i in range(mini_map_img.shape[1])] for j in range(mini_map_img.shape[0])]
+    # retrieve the entity of which heatmap has to be computed
+    heatmap_entity = None
+    if FLAGS.heatmap.isdigit():
+        if int(FLAGS.heatmap) > 0:
+            heatmap_entity = int(FLAGS.heatmap)
+    elif FLAGS.heatmap == "ref" or FLAGS.heatmap == "home" or FLAGS.heatmap == "away":
+        heatmap_entity = FLAGS.heatmap
 
     # start computation of output video
     for i in range(final_vid_len):
@@ -978,8 +988,18 @@ def main(_argv):
                     cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
             else:
                 cv2.circle(bird_eye, (pi[1], pi[2]), 3, (pi[3][2],pi[3][1],pi[3][0]),cv2.FILLED)
-                if pi[3][2] == 255 and pi[3][1] == 0 and pi[3][0] == 0: #TODO: Rework this line to let the user choose which kind of heatmap he wants
-                    heatmap_values[pi[2]][pi[1]] += 1
+                # update heatmap values
+                if heatmap_entity != None:
+                    if isinstance(heatmap_entity, int):
+                        if pi[0] == heatmap_entity:
+                            heatmap_values[pi[2]][pi[1]] += 1
+                    else:
+                        if heatmap_entity == "ref" and pi[3][2] == 0 and pi[3][1] == 0 and pi[3][0] == 255:
+                            heatmap_values[pi[2]][pi[1]] += 1
+                        elif heatmap_entity == "home" and pi[3][2] == 255 and pi[3][1] == 0 and pi[3][0] == 0:
+                            heatmap_values[pi[2]][pi[1]] += 1
+                        elif heatmap_entity == "away" and pi[3][2] == 255 and pi[3][1] == 255 and pi[3][0] == 255:
+                            heatmap_values[pi[2]][pi[1]] += 1
 
         # shrink bird's-eye view image
         scale_percent = FLAGS.img_scale_shrink
@@ -1015,9 +1035,12 @@ def main(_argv):
     heatmap_background = cv2.cvtColor(mini_map_img, cv2.COLOR_BGR2BGRA)
 
     # convert the range of raw heatmap values to the range of color map values maintaining ratio
-    for i in range(heatmap_background.shape[0]):
-        for j in range(heatmap_background.shape[1]):
-            heatmap_values[i][j] = int((float(heatmap_values[i][j]) / float(final_vid_len)) * 255) #TODO: We may modify the formula
+    min_heatmap_value = np.amin(heatmap_values)
+    max_heatmap_value = np.amax(heatmap_values)
+    if max_heatmap_value != 0:
+        for i in range(heatmap_background.shape[0]):
+            for j in range(heatmap_background.shape[1]):
+                heatmap_values[i][j] = int(((float(heatmap_values[i][j]) - float(min_heatmap_value)) / (float(max_heatmap_value) - float(min_heatmap_value))) * 255)
 
     # transform the heatmap values two-dimensional list into a frame on which we apply a color map
     heatmap_values = np.array(heatmap_values)
@@ -1043,8 +1066,9 @@ def main(_argv):
     heatmap_background[:,:,3] = (1 - (1 - alpha_foreground) * (1 - alpha_background)) * 255
 
     # write heatmap to img folder
-    save_path = "data/img/heatmap_player_blue_final.png"
-    cv2.imwrite(save_path, heatmap_background)
+    if heatmap_entity != None:
+        save_path = "data/img/heatmap_" + FLAGS.heatmap + ".png"
+        cv2.imwrite(save_path, heatmap_background)
 
     """
     ####################################################################
