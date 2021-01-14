@@ -79,6 +79,7 @@ flags.DEFINE_string('heatmap', '', 'entity of which heatmap has to be computed |
                     2nd REMINDER : every letter must be in lower case when entering one of the possible word')
 flags.DEFINE_integer('max_dist_possession', 70, 'maximum acceptable distance in pixels between the ball and the closest bbox center to consider being in Possession phase')
 flags.DEFINE_integer('img_scale_shrink', 60, 'shrink the mini-map to the specified scale in %')
+flags.DEFINE_string('heatmap_path', '', 'path to computed heatmap image')
 
 def main(_argv):
 
@@ -917,7 +918,19 @@ def main(_argv):
         ratio_possession_home = str(possession_home) + "/" + str(nb_possession_frames)
         ratio_possession_away = str(possession_away) + "/" + str(nb_possession_frames)
         if nb_possession_frames > 0:
-            cv2.putText(result, str(int((possession_home/nb_possession_frames)*100)) + "%" + " (" + ratio_possession_home + ")" + " - Possession - " + str(int((possession_away/nb_possession_frames)*100)) + "%" + " (" + ratio_possession_away + ")", (1230, 1068), 0, 0.75, (255,255,255), 2)
+            percent_possession_home = (possession_home/nb_possession_frames)*100
+            percent_possession_away = (possession_away/nb_possession_frames)*100
+            if round(percent_possession_home) + round(percent_possession_away) == 101:
+                if percent_possession_home > percent_possession_away:
+                    percent_possession_home = int(percent_possession_home)
+                    percent_possession_away = int(percent_possession_away) + 1
+                else:
+                    percent_possession_home = int(percent_possession_home) + 1
+                    percent_possession_away = int(percent_possession_away)
+            else:
+                percent_possession_home = round(percent_possession_home)
+                percent_possession_away = round(percent_possession_away)
+            cv2.putText(result, str(percent_possession_home) + "%" + " (" + ratio_possession_home + ")" + " - Possession - " + str(percent_possession_away) + "%" + " (" + ratio_possession_away + ")", (1230, 1068), 0, 0.75, (255,255,255), 2)
         else:
             cv2.putText(result, str(0) + "%" + " (" + ratio_possession_home + ")" + " - Possession - " + str(0) + "%" + " (" + ratio_possession_away + ")", (1230, 1068), 0, 0.75, (255,255,255), 2)
 
@@ -1067,7 +1080,11 @@ def main(_argv):
 
     # write heatmap to img folder
     if heatmap_entity != None:
-        save_path = "data/img/heatmap_" + FLAGS.heatmap + ".png"
+        save_path = None
+        if FLAGS.heatmap_path == '':
+            save_path = "./data/img/heatmap_" + FLAGS.heatmap + ".png"
+        else:
+            save_path = FLAGS.heatmap_path
         cv2.imwrite(save_path, heatmap_background)
 
     """
