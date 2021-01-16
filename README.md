@@ -2,6 +2,7 @@
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
 # Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
+Final result: [football_match_tracking.mp4](https://github.com/vincentrinaldi/MasterSemesterProject/blob/master/outputs/football_match_tracking.mp4)
 
 ## Starting Point of the Project
 Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
