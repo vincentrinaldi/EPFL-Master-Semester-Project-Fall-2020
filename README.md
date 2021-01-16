@@ -1,8 +1,11 @@
-# Master Semester Project EPFL Fall 2020  Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
+# Master Semester Project EPFL Fall 2020
+# Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
 ## Starting Point of the Project
-Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)  Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
+Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
+
+Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
 
 ### Demo of Object Tracker on Persons
 <p align="center"><img src="data/helpers/demo.gif"\></p>
