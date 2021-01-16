@@ -59,7 +59,7 @@ flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 flags.DEFINE_integer('vid_len', -1, 'maximum number of frames to process per video')
 flags.DEFINE_string('landmark_coords', '278,98-0,460-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,460-1642,98',
-                    'landmark 2D coordinates on frames for each video in the form x1,y1-x2,y2-...-x5,y5 or x1,y1-x2,y2-...-x4,y4 | \
+                    'landmark 2D coordinates on frames for each video in the form x1,y1-x2,y2-...-x4,y4 or x1,y1-x2,y2-...-x5,y5 or x1,y1-x2,y2-...-x6,y6 | \
                     1st REMINDER : 5 (x,y) points are expected for either end of the field (in the order {top-left -> fifth point -> bottom-left -> bottom-right -> top-right} for left end and {top-left -> bottom-left -> bottom-right -> fifth point -> top-right} for right end) while 4 are expected for the other filmed parts (in the order {top-left, bottom-left, bottom-right, top-right}) | \
                     2nd REMINDER : each list of points for a given video has to be separated from others by a + | \
                     3rd REMINDER : in the case there is only one input video then 6 (x,y) points (in the order {top-left -> fifth point -> bottom-left -> bottom-right -> sixth point -> top-right}) or 4 (x,y) points (in the order {top-left, bottom-left, bottom-right, top-right}) are expected | \
