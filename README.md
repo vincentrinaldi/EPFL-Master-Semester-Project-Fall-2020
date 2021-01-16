@@ -1,6 +1,7 @@
 # Master Semester Project EPFL Fall 2020
-# Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
+
+# Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
 
 ## Starting Point of the Project
 Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
