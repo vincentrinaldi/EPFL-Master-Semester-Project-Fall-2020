@@ -1,9 +1,8 @@
-# Master Semester Project EPFL Fall 2020 : Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
+# Master Semester Project EPFL Fall 2020  Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
 ## Starting Point of the Project
-[yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
-Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
+Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)  Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
 
 ### Demo of Object Tracker on Persons
 <p align="center"><img src="data/helpers/demo.gif"\></p>
@@ -126,7 +125,7 @@ save_model.py:
   --output: path to output video (remember to set right codec for given format. e.g. XVID for .avi)
     (default: None)
   --output_format: codec used in VideoWriter when saving video to file
-    (default: 'XVID)
+    (default: 'XVID')
   --iou: iou threshold
     (default: 0.45)
   --score: confidence threshold
@@ -140,9 +139,9 @@ save_model.py:
   --vid_len: maximum number of frames to process per video
     (default: -1)
   --landmark_coords: landmark 2D coordinates on frames for each video in the form x1,y1-x2,y2-...-x4,y4 or x1,y1-x2,y2-...-x5,y5 or x1,y1-x2,y2-...-x6,y6
-    (default: 278,98-0,460-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,460-1642,98)
+    (default: '278,98-0,460-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,98+0,98-0,1038-1920,1038-1920,460-1642,98')
   --mini_landmark_coords: landmark 2D coordinates on mini-map for each video in the form x1,y1-x2,y2-...-x4,y4
-    (default: 0,0-22,320-142,320-190,0+142,0-190,320-307,320-355,0+307,0-355,320-475,320-497,0)
+    (default: '0,0-22,320-142,320-190,0+142,0-190,320-307,320-355,0+307,0-355,320-475,320-497,0')
   --ball_range_update: potential range in pixels between the current ball position we are trying to predict and the previous recorded ball position in the form range_x,range_y
     (default: 100,100)
   --ball_threshold: ball detection threshold
@@ -152,7 +151,7 @@ save_model.py:
   --max_bbox_dim: maximum acceptable bbox dimensions in pixels of detected object in the form max_width,max_height
     (default: 110,170)
   --img_input: path to mini-map image
-    (default: ./data/img/football_field.jpg)
+    (default: './data/img/football_field.jpg')
   --heatmap: entity of which heatmap has to be computed
     (default: '')
   --max_dist_possession: maximum acceptable distance in pixels between the ball and the closest bbox center to consider being in Possession phase
