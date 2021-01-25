@@ -177,7 +177,7 @@ save_model.py:
   
    Extra Credits to Việt Hùng and Nicolai Wojke for creating the backbones of the [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort) repository:
   * [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite)
-  * [Deep SORT Repository](https://github.com/nwojke/deep_sort)
+  * [deep_sort](https://github.com/nwojke/deep_sort)
 
 ## Additional Object Detector: DeepBall
 Repository: [DeepBall-Keras](https://github.com/RvI101/DeepBall-Keras)
