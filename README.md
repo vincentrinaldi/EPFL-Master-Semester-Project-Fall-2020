@@ -4,7 +4,7 @@
 # Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
 Final result: [football_match_tracking.mp4](https://github.com/vincentrinaldi/MasterSemesterProject/blob/master/outputs/football_match_tracking.mp4)
 
-## Starting Point of the Project
+## Starting Point of the Project: YOLOv4 & DeepSORT
 Repository: [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
 
 Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
@@ -168,11 +168,27 @@ save_model.py:
 ```
 
 #### References
-   Credits to theAIGuysCode for his excellent work on YOLOv4/DeepSORT and for having made publicly available the [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort) repository with a helpful tutorial to use the different features:
+   Credits to Jack Wotherspoon for his excellent work on YOLOv4/DeepSORT and for having made publicly available the [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort) repository with a helpful tutorial to use the different features:
   * [GitHub](https://github.com/theAIGuysCode)
   * [YouTube channel](https://www.youtube.com/channel/UCrydcKaojc44XnuXrfhlV8Q/videos)
   * [YOLOv4 in the CLOUD: Build Object Tracking Using DeepSORT in Google Colab (FREE GPU)](https://www.youtube.com/watch?v=_zrNUzDS8Zc&t=7s)
+  * [YOLOv4 paper](https://arxiv.org/pdf/2004.10934.pdf)
+  * [DeepSORT paper](https://arxiv.org/pdf/1703.07402.pdf)
   
-   Extra Credits to hunglc007 and nwojke for creating the backbones of the [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort) repository:
+   Extra Credits to Việt Hùng and Nicolai Wojke for creating the backbones of the [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort) repository:
   * [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite)
   * [Deep SORT Repository](https://github.com/nwojke/deep_sort)
+
+## Additional Object Detector: DeepBall
+Repository: [DeepBall-Keras](https://github.com/RvI101/DeepBall-Keras)
+
+Deep neural-network based object detector specialized for ball detection in long shot videos implemented with TensorFlow-Keras.
+
+### Demo of DeepBall ball detection system
+<p align="center"><img src="data/helpers/S6ball.gif"\></p>
+
+#### References
+   Credits to Arvind Ramachandran for having made publicly available the [DeepBall-Keras](https://github.com/RvI101/DeepBall-Keras) repository:
+  * [GitHub](https://github.com/RvI101)
+  * [DeepBall paper](https://arxiv.org/pdf/1902.07304.pdf)
+  * [Train dataset](https://pspagnolo.jimdofree.com/download/)
