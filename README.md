@@ -1,4 +1,4 @@
-# Master Semester Project EPFL Fall 2020
+# Master Semester Project EPFL Fall 2020 (CS-498)
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
 # Automatic tracking, event detection and visualization in sports video for summarization and statistical analysis
